@@ -119,7 +119,7 @@ export function ConnectHero() {
             {isPending
               ? copy.connect.connecting
               : visible.length > 1
-                ? `plug in w/ ${c.name.toLowerCase()} →`
+                ? `connect w/ ${c.name.toLowerCase()} →`
                 : copy.connect.button}
           </button>
         ))}
@@ -212,7 +212,7 @@ export function WalletHeader() {
           {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : ''}
         </span>
         <button className="linkish" onClick={() => disconnect()}>
-          unplug
+          disconnect
         </button>
       </span>
     </div>

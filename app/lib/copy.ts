@@ -16,7 +16,7 @@ export const copy = {
   connect: {
     captionTop: CAPTION_TOP,
     captionBottom: CAPTION_BOTTOM,
-    button: 'plug in, dawg →',
+    button: 'connect, dawg →',
     connecting: 'shaking hands…',
   },
 
