@@ -10,5 +10,6 @@ library RobinhoodClanker {
     address internal constant LOCKER = 0x290F735F63824BB5836cDe24a35F5103A5B5Bc99;
     address internal constant FEE_STATIC_HOOK_V2 = 0x48B8F6AD3A1b4aA477314c9a23035b8F84dDe8cc;
     address internal constant MEV_MODULE = 0xEA1Fe197dF140e5d88fC6B49f2d21Ea05092299e;
+    address internal constant FEE_LOCKER = 0x88db2340bE5991B2b5Fca2Baee39B5CE048Cd70c;
     address internal constant HOODIE = 0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3;
 }

@@ -16,12 +16,23 @@ Three pieces, one repo:
 
 **2. `Launcher`** (`contracts/src/Launcher.sol`) — `launch(LaunchParams)` builds the Clanker v4 `deployToken()` call (selector `0xdf40224a`) and calls the **already-deployed** factory at `0xD3f2cC1731b7Fd17f28798835C2E02f0a1839A94`. The wrapper never deploys, upgrades, or administers any Clanker contract — it is strictly a caller. The launcher's `feeRecipient` gets `lpRewardBps` (max 50%) of LP fee rewards; the token creator gets the rest.
 
+### Fee semantics (resolved from the factory ABI, not assumed)
+
+When a contract calls `deployToken()`, **nothing accrues to `msg.sender`**. The factory takes explicit parameters for everything that matters:
+
+- **Creator/admin** = `tokenConfig.tokenAdmin` — the wrapper passes the user's address, so the user (not the wrapper) owns the token admin role.
+- **LP fee rewards** = `lockerConfig.rewardRecipients[]` + `rewardBps[]` — the wrapper writes `[creator, feeRecipient]` with `[10000 - lpRewardBps, lpRewardBps]` directly into the locker's on-chain reward table at deploy time.
+
+The payout pipeline is entirely Clanker's own periphery, so **the wrapper never holds or forwards funds**: fees accrue in the Uniswap v4 position → anyone calls `ClankerLpLockerFeeConversion.collectRewards(token)` (`0x290F…5Bc99`), which splits by `rewardBps` and stores per-recipient balances in the `ClankerFeeLocker` (`0x88db…d70c`) → each recipient withdraws with `claim(recipient, token)` (permissionless to trigger, always pays the recipient).
+
+This is proven end-to-end in `contracts/test/FeePath.t.sol` on a mainnet fork: launch with a 20% share → real Uniswap v4 swap generates fees → `collectRewards` → assert the 80/20 split in the fee locker → `claim` → assert the ERC20 $HOODIE actually lands in the launcher owner's wallet.
+
 ### Where the immutable rule is enforced
 
 - `Launcher.HOODIE` is a **compile-time `constant`** — not storage, not an immutable set by a constructor arg, no setter, no initializer parameter.
 - `Launcher.LaunchParams` **has no pairedToken field**: a direct caller of `launch()` cannot even express a different pair (reject-by-construction).
 - Every clone delegatecalls the same implementation bytecode, so every launcher created by `LauncherLauncher` inherits the rule with no per-launcher escape hatch.
-- Proof lives in the tests: `test_hoodieIsConstant_expectedAddress`, `test_everyCloneInheritsHoodie`, `test_noPairSetterExists`, `test_implementationIsBricked`, `test_cloneInitializesExactlyOnce` (`contracts/test/Immutability.t.sol`, no fork needed) and `test_fullFlow_tokenPairedWithHoodie`, `testFuzz_launch_alwaysPairsHoodie`, `test_customTick_stillHoodie` (`contracts/test/LauncherFork.t.sol`, run against a fork of the live factory — they decode the factory's own `TokenCreated` event and assert `pairedToken == HOODIE`).
+- Proof lives in the tests: `test_hoodieIsConstant_expectedAddress`, `test_everyCloneInheritsHoodie`, `test_noPairSetterExists`, `test_implementationIsBricked`, `test_cloneInitializesExactlyOnce` (`contracts/test/Immutability.t.sol`, no fork needed) and `test_fullFlow_tokenPairedWithHoodie`, `testFuzz_launch_alwaysPairsHoodie`, `test_customTick_stillHoodie` (`contracts/test/LauncherFork.t.sol`, run against a fork of the live factory — they decode the factory's own `TokenCreated` event and assert `pairedToken == HOODIE`). The **fee path** is covered separately by `contracts/test/FeePath.t.sol` (see "Fee semantics" above): real swap volume on the fork, then assert the launcher's fee recipient actually receives its configured LP-fee split as ERC20.
 
 ## Fork testing (Robinhood has no testnet)
 
@@ -43,8 +54,9 @@ Next.js app in `app/`, using `@farcaster/miniapp-sdk` (0.3.x) + `@farcaster/mini
 
 - **Flows:** create a launcher → browse the on-chain registry → launch a token through a selected launcher → post-launch proof panel + standalone "Verify" tab (paste any tx hash; it decodes the factory's `TokenCreated` event client-side).
 - **Wallet:** users sign with their own wallet via the Mini App Ethereum provider (`farcasterMiniApp()` connector) or an injected wallet in a plain browser. Target chain is 4663 with a switch/add-chain prompt. **No server key anywhere in the app path.**
+- **KNOWN LIMITATION — the Farcaster in-app wallet cannot reach Robinhood Chain.** Verified against the `@farcaster/miniapp-wagmi-connector` source and [farcasterxyz/miniapps#240](https://github.com/farcasterxyz/miniapps/discussions/240): the host wallet supports `wallet_switchEthereumChain` but **not** `wallet_addEthereumChain`, and its built-in chain list (Base, Mainnet, OP, Arbitrum, Polygon, Unichain, Zora, …) does not include 4663. The app detects this at runtime via `sdk.getChains()` and shows an explicit limitation banner instead of a broken switch button. Injected wallets (MetaMask, Rabby, …) work — wagmi falls back to `wallet_addEthereumChain` with the chain metadata from `app/lib/wagmi.ts`.
 - **The pairing is not an editable field anywhere** — it renders as a locked banner (`app/components/locked-pair.tsx`).
-- **Market cap → tick:** the launch form takes a target starting market cap denominated in $HOODIE and computes `tick = floor(log(mcap / 100e9) / log(1.0001) / 200) * 200` (both tokens are 18 decimals, so no decimal adjustment; USD denomination would need a $HOODIE price feed — deliberately out of scope). A manual tick override exists behind a warning; the SDK default `-230400` ≈ 10 $HOODIE.
+- **Market cap → tick, in USD with a live price:** the launch form takes a target starting market cap in **USD** (default $30,000 — the same order as standard Clanker pools) and converts it via the live $HOODIE/USD price to `tick = floor(log(mcapHoodie / 100e9) / log(1.0001) / 200) * 200` (both tokens verified 18-decimal on-chain, so no decimal adjustment). **Price source:** Dexscreener's public API reading the HOODIE/WETH Uniswap v4 pool on Robinhood Chain (`src/hoodie-price.ts`) — the source is displayed in the UI, off-chain and UI-only, nothing on-chain trusts it. If the fetch fails the form degrades to the manual tick override, which sits behind a warning showing the implied $HOODIE + USD market cap. The contract's `startingTick == 0` fallback (`DEFAULT_STARTING_TICK = -27800`, ≈$30k calibrated 2026-07-20) is a sane-order-of-magnitude backstop only; the UI always passes an explicit tick.
 
 ### Run it against the fork
 

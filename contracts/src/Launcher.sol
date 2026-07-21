@@ -18,8 +18,13 @@ contract Launcher {
     /// @notice $HOODIE on Robinhood Chain. Immutable at the protocol level.
     address public constant HOODIE = 0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3;
 
-    /// @dev SDK default starting tick for an 18-decimal pair (~10 HOODIE market cap).
-    int24 public constant DEFAULT_STARTING_TICK = -230400;
+    /// @dev Fallback starting tick when `startingTick == 0`. The SDK default
+    /// (-230400) assumes a WETH pair and is ~10 $HOODIE market cap here — useless.
+    /// -27800 ≈ 6.2B $HOODIE market cap (~$30k at $HOODIE ≈ $4.8e-6, calibrated
+    /// 2026-07-20 from the HOODIE/WETH v4 pool). $HOODIE price drifts, so the UI
+    /// and CLI always compute and pass an explicit tick from a live price feed;
+    /// this constant is only a sane-order-of-magnitude fallback.
+    int24 public constant DEFAULT_STARTING_TICK = -27800;
     int24 public constant TICK_SPACING = 200;
     /// @dev Width of the single full-range-ish LP position (matches SDK POOL_POSITIONS.Standard).
     int24 public constant POSITION_WIDTH = 110400;

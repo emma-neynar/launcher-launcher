@@ -4,8 +4,10 @@ import { clankerConfigFor } from 'clanker-sdk';
 import { Command } from 'commander';
 import { decodeFunctionData, isAddress, isAddressEqual } from 'viem';
 import { CHAIN_ID, DEFAULT_LAUNCHER_FEE_SHARE_BPS, EXPLORER_URL, HOODIE_ADDRESS } from './constants.js';
+import { fetchHoodiePriceUsd } from './hoodie-price.js';
 import { launchToken, publicClient } from './launch.js';
 import { type Launcher, getLauncher, loadRegistry, saveRegistry, slugify } from './registry.js';
+import { DEFAULT_MARKET_CAP_USD, TICK_SPACING, marketCapForTick, tickForMarketCapUsd } from './tick.js';
 
 const program = new Command()
   .name('launcher-launcher')
@@ -97,6 +99,8 @@ program
   .requiredOption('--creator <address>', 'token creator (admin + majority reward recipient)')
   .option('--image <url>', 'token image (http or ipfs url)')
   .option('--description <text>', 'token description')
+  .option('--market-cap-usd <usd>', 'target starting market cap in USD (uses live $HOODIE price from Dexscreener)', String(DEFAULT_MARKET_CAP_USD))
+  .option('--tick <tick>', `manual starting tick override (advanced; multiple of ${TICK_SPACING})`)
   .option('--paired-token <address>', 'IGNORED unless it equals $HOODIE — pairing is locked')
   .option('--live', 'broadcast to Robinhood Chain mainnet (requires PRIVATE_KEY + confirmation)', false)
   .action(async (opts: {
@@ -106,11 +110,32 @@ program
     creator: string;
     image?: string;
     description?: string;
+    marketCapUsd: string;
+    tick?: string;
     pairedToken?: string;
     live: boolean;
   }) => {
     const launcher = getLauncher(opts.launcher);
     console.log(`Launcher: ${launcher.name} — every token it launches is paired with $HOODIE.`);
+
+    let startingTick: number;
+    if (opts.tick !== undefined) {
+      startingTick = Number(opts.tick);
+      if (!Number.isInteger(startingTick) || startingTick % TICK_SPACING !== 0) {
+        throw new Error(`--tick must be an integer multiple of ${TICK_SPACING}`);
+      }
+      console.log(
+        `WARNING: manual tick ${startingTick} ≈ ${Math.round(marketCapForTick(startingTick)).toLocaleString()} $HOODIE starting market cap — make sure that is what you want.`
+      );
+    } else {
+      const price = await fetchHoodiePriceUsd();
+      startingTick = tickForMarketCapUsd(Number(opts.marketCapUsd), price.priceUsd);
+      console.log(
+        `$HOODIE price: $${price.priceUsd.toPrecision(4)} (source: ${price.source})\n` +
+          `Target $${Number(opts.marketCapUsd).toLocaleString()} market cap -> starting tick ${startingTick} ` +
+          `(≈ ${Math.round(marketCapForTick(startingTick)).toLocaleString()} $HOODIE).`
+      );
+    }
 
     if (opts.live) {
       await confirmOrAbort(
@@ -127,6 +152,7 @@ program
         image: opts.image,
         description: opts.description,
         creator: requireAddress(opts.creator, '--creator'),
+        startingTick,
         requestedPairedToken: opts.pairedToken,
       },
       { live: opts.live }

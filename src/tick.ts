@@ -9,16 +9,23 @@
  *   price(HOODIE per token) = marketCapInHoodie / TOTAL_SUPPLY
  *   tick = floor( ln(price) / ln(1.0001) / TICK_SPACING ) * TICK_SPACING
  *
- * NOTE: the market cap here is denominated in $HOODIE, not USD. Converting a
- * USD target requires the current $HOODIE/USD price (external feed) — that is
- * deliberately out of scope; the UI labels the input in $HOODIE.
+ * The tick math itself is denominated in $HOODIE. A USD target is converted
+ * first via the live $HOODIE/USD price (see src/hoodie-price.ts for the price
+ * source); both tokens are verified 18-decimal so no decimal adjustment.
  */
 
 export const TICK_SPACING = 200;
 /** Clanker v4 fixed total supply: 100 billion tokens. */
 export const TOTAL_SUPPLY = 100_000_000_000;
-/** SDK default (~10 HOODIE market cap). */
-export const DEFAULT_TICK = -230400;
+/**
+ * Contract fallback tick (must equal Launcher.sol DEFAULT_STARTING_TICK).
+ * ≈ 6.2B $HOODIE market cap — roughly $30k when calibrated 2026-07-20 at
+ * $HOODIE ≈ $4.8e-6. The UI always computes an explicit tick from the live
+ * price instead of relying on this.
+ */
+export const DEFAULT_TICK = -27800;
+/** Default USD starting market cap target (Clanker standard pools open ~$27-30k). */
+export const DEFAULT_MARKET_CAP_USD = 30_000;
 /** Uniswap v4 usable tick bounds (rounded to spacing). */
 export const MIN_TICK = -887200;
 export const MAX_TICK = 887200;
@@ -38,4 +45,17 @@ export function tickForMarketCap(marketCapHoodie: number): number {
 
 export function marketCapForTick(tick: number): number {
   return 1.0001 ** tick * TOTAL_SUPPLY;
+}
+
+/** USD market cap -> tick, given the live $HOODIE/USD price. */
+export function tickForMarketCapUsd(marketCapUsd: number, hoodiePriceUsd: number): number {
+  if (!Number.isFinite(hoodiePriceUsd) || hoodiePriceUsd <= 0) {
+    throw new Error('Need a positive $HOODIE/USD price');
+  }
+  return tickForMarketCap(marketCapUsd / hoodiePriceUsd);
+}
+
+/** Tick -> USD market cap, given the live $HOODIE/USD price. */
+export function marketCapUsdForTick(tick: number, hoodiePriceUsd: number): number {
+  return marketCapForTick(tick) * hoodiePriceUsd;
 }
