@@ -1,70 +1,54 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { decodeEventLog, isAddress } from 'viem';
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
-import { launcherLauncherAbi } from '@/src/wrapper-abi';
+import { useAccount } from 'wagmi';
+import { DEFAULT_LP_REWARD_BPS, MAX_LP_REWARD_BPS, isValidLpRewardBps } from '@/src/fees';
+import type { Launcher } from '@/src/registry';
 import { copy } from '../lib/copy';
-import { LAUNCHER_LAUNCHER_ADDRESS } from '../lib/wagmi';
+import { FeeSplit } from './fee-split';
 
+/**
+ * Screen 4 — create a launcher (off-chain model: a saved registry config, no
+ * transaction to sign). Exactly ONE user-set parameter: lpRewardBps. The fee
+ * recipient is forced to the connected wallet; the pairing and token config
+ * are house rules.
+ */
 export function CreateLauncher({
   onCreated,
   onToast,
   onBack,
 }: {
-  onCreated: (launcher: `0x${string}`) => void;
+  onCreated: (launcher: Launcher) => void;
   onToast: (msg: string) => void;
   onBack: () => void;
 }) {
   const { address } = useAccount();
-  const publicClient = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const queryClient = useQueryClient();
 
   const [name, setName] = useState('');
-  const [feeRecipient, setFeeRecipient] = useState('');
-  const [lpShare, setLpShare] = useState('20');
+  const [cutPct, setCutPct] = useState(String(DEFAULT_LP_REWARD_BPS / 100));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const recipient = feeRecipient || address || '';
-  const shareNum = Number(lpShare);
-  const rest = Number.isFinite(shareNum) ? Math.max(0, 100 - shareNum) : 80;
+  const lpRewardBps = Math.round(Number(cutPct) * 100);
+  const cutValid = isValidLpRewardBps(lpRewardBps);
 
   async function create() {
+    if (!address) return;
     setBusy(true);
     setError('');
     try {
-      if (!isAddress(recipient)) throw new Error('fee recipient must be a valid address');
-      const bps = Math.round(Number(lpShare) * 100);
-      if (!Number.isInteger(bps) || bps < 0 || bps > 5000) {
-        throw new Error('your cut must be between 0% and 50%');
-      }
-      const hash = await writeContractAsync({
-        address: LAUNCHER_LAUNCHER_ADDRESS,
-        abi: launcherLauncherAbi,
-        functionName: 'createLauncher',
-        args: [name, recipient as `0x${string}`, bps],
+      const res = await fetch('/api/launchers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, feeRecipient: address, lpRewardBps }),
       });
-      onToast(copy.toasts.txSubmitted);
-      const receipt = await publicClient!.waitForTransactionReceipt({ hash });
-      for (const log of receipt.logs) {
-        if (log.address.toLowerCase() !== LAUNCHER_LAUNCHER_ADDRESS.toLowerCase()) continue;
-        try {
-          const decoded = decodeEventLog({
-            abi: launcherLauncherAbi,
-            data: log.data,
-            topics: log.topics,
-          });
-          if (decoded.eventName === 'LauncherCreated') {
-            onToast(copy.create.successToast);
-            onCreated(decoded.args.launcher);
-            return;
-          }
-        } catch {
-          // other event
-        }
-      }
-      throw new Error('transaction confirmed but no LauncherCreated event found');
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `registry error (${res.status})`);
+      await queryClient.invalidateQueries({ queryKey: ['launchers'] });
+      onToast(copy.create.successToast);
+      onCreated(body as Launcher);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -80,7 +64,6 @@ export function CreateLauncher({
       <h1 className="meme-caption" style={{ fontSize: 19 }}>
         {copy.create.title}
       </h1>
-      <p className="meme-sub">{copy.create.sub}</p>
 
       <div className="field">
         <label>{copy.create.nameLabel}</label>
@@ -93,39 +76,31 @@ export function CreateLauncher({
         />
       </div>
       <div className="field">
-        <label>{copy.create.feeLabel}</label>
-        <input
-          className="input"
-          value={feeRecipient}
-          onChange={(e) => setFeeRecipient(e.target.value.trim())}
-          placeholder={address ? `${address.slice(0, 6)}…${address.slice(-4)} (you)` : '0x…'}
-        />
-      </div>
-      <div className="field">
         <label>{copy.create.cutLabel}</label>
         <input
           className="input"
-          value={lpShare}
-          onChange={(e) => setLpShare(e.target.value)}
+          value={cutPct}
+          onChange={(e) => setCutPct(e.target.value)}
           inputMode="decimal"
         />
-        <div className="hint">{copy.create.cutHint(rest)}</div>
+        <div className="hint">{copy.create.cutHint(MAX_LP_REWARD_BPS / 100)}</div>
+        {address && <div className="hint">{copy.create.feeRecipientNote(short(address))}</div>}
       </div>
 
-      {!LAUNCHER_LAUNCHER_ADDRESS && (
-        <div className="warnbar">
-          NEXT_PUBLIC_LAUNCHER_LAUNCHER_ADDRESS is not set — deploy the wrapper first.
-        </div>
+      <FeeSplit lpRewardBps={cutValid ? lpRewardBps : DEFAULT_LP_REWARD_BPS} />
+
+      {!cutValid && cutPct !== '' && (
+        <p className="error-code">error: your cut must be between 0% and {MAX_LP_REWARD_BPS / 100}%</p>
       )}
       {error && <p className="error-code">error: {error}</p>}
 
-      <button
-        className="btn bottom"
-        onClick={create}
-        disabled={busy || !name || !LAUNCHER_LAUNCHER_ADDRESS}
-      >
+      <button className="btn bottom" onClick={create} disabled={busy || !name || !cutValid || !address}>
         {busy ? 'making it so…' : copy.create.button}
       </button>
     </>
   );
+}
+
+function short(a: string) {
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }

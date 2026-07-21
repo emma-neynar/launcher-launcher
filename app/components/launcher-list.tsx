@@ -1,128 +1,107 @@
 'use client';
 
-import { useAccount, useReadContract, useReadContracts } from 'wagmi';
-import { launcherAbi, launcherLauncherAbi } from '@/src/wrapper-abi';
+import { useQuery } from '@tanstack/react-query';
+import { useAccount } from 'wagmi';
+import type { Launcher } from '@/src/registry';
 import { copy } from '../lib/copy';
-import { APP_URL, LAUNCHER_LAUNCHER_ADDRESS } from '../lib/wagmi';
+import { APP_URL } from '../lib/wagmi';
+import { feeSplitCompact } from './fee-split';
 
-export type LauncherInfo = {
-  launcher: `0x${string}`;
-  creator: `0x${string}`;
-  name: string;
-  feeRecipient: `0x${string}`;
-  lpRewardBps: number;
-  createdAt: bigint;
-};
-
+/**
+ * Launchers come from the registry-only backend (app/api/launchers) — a
+ * launcher is a saved config, not a contract. See README "Launcher
+ * persistence" for the off-chain model.
+ */
 export function useLaunchers() {
-  const { data, refetch, isLoading } = useReadContract({
-    address: LAUNCHER_LAUNCHER_ADDRESS || undefined,
-    abi: launcherLauncherAbi,
-    functionName: 'allLaunchers',
-    query: { enabled: Boolean(LAUNCHER_LAUNCHER_ADDRESS), refetchInterval: 15_000 },
+  const { data, isLoading } = useQuery<Launcher[]>({
+    queryKey: ['launchers'],
+    queryFn: async () => {
+      const res = await fetch('/api/launchers');
+      if (!res.ok) throw new Error(`registry fetch failed (${res.status})`);
+      return res.json();
+    },
+    refetchInterval: 15_000,
   });
-  return { launchers: (data ?? []) as readonly LauncherInfo[], refetch, isLoading };
+  return { launchers: data ?? [], isLoading };
 }
 
+/** Split the registry by whether the connected wallet operates the launcher. */
+export function splitLaunchers(launchers: readonly Launcher[], address?: string) {
+  const mine = launchers.filter(
+    (l) => address && l.feeRecipient.toLowerCase() === address.toLowerCase()
+  );
+  const others = launchers.filter(
+    (l) => !address || l.feeRecipient.toLowerCase() !== address.toLowerCase()
+  );
+  return { mine, others };
+}
+
+/**
+ * One list screen ('mine' or 'others') — navigated to from the mascot home.
+ */
 export function LauncherList({
+  filter,
   onSelect,
   onToast,
+  onBack,
 }: {
-  onSelect: (l: `0x${string}`) => void;
+  filter: 'mine' | 'others';
+  onSelect: (l: Launcher) => void;
   onToast: (msg: string) => void;
+  onBack: () => void;
 }) {
   const { address } = useAccount();
   const { launchers, isLoading } = useLaunchers();
+  const { mine, others } = splitLaunchers(launchers, address);
+  const shown = filter === 'mine' ? mine : others;
 
-  const { data: counts } = useReadContracts({
-    contracts: launchers.map((l) => ({
-      address: l.launcher,
-      abi: launcherAbi,
-      functionName: 'launchCount' as const,
-    })),
-    query: { enabled: launchers.length > 0, refetchInterval: 15_000 },
-  });
-
-  const countFor = (i: number) => {
-    const r = counts?.[i];
-    return r && r.status === 'success' ? Number(r.result as bigint) : 0;
-  };
-
-  const mine = launchers
-    .map((l, i) => ({ ...l, count: countFor(i) }))
-    .filter((l) => address && l.creator.toLowerCase() === address.toLowerCase());
-  const others = launchers
-    .map((l, i) => ({ ...l, count: countFor(i) }))
-    .filter((l) => !address || l.creator.toLowerCase() !== address.toLowerCase());
-
-  async function copyShare(launcher: `0x${string}`) {
+  async function copyShare(id: string) {
     try {
-      await navigator.clipboard.writeText(`${APP_URL}/l/${launcher}`);
+      await navigator.clipboard.writeText(`${APP_URL}/l/${id}`);
       onToast(copy.toasts.copied);
     } catch {
       /* clipboard unavailable */
     }
   }
 
-  function card(l: LauncherInfo & { count: number }, ownedByMe: boolean) {
-    return (
-      <div key={l.launcher} className="card clickable" onClick={() => onSelect(l.launcher)}>
-        <b style={{ fontSize: 13 }}>{l.name || short(l.launcher)}</b>
-        <div className="muted">
-          {ownedByMe
-            ? copy.home.meta(l.count, String(l.lpRewardBps / 100))
-            : copy.home.othersMeta(l.count, String(l.lpRewardBps / 100))}
-        </div>
-        <div className="pill" style={{ marginTop: 8 }}>
-          {copy.home.pill}
-        </div>
-        <div style={{ marginTop: 6 }}>
-          <button
-            className="linkish"
-            onClick={(e) => {
-              e.stopPropagation();
-              copyShare(l.launcher);
-            }}
-          >
-            {copy.home.share(`${APP_URL}/l/${short(l.launcher)}`)}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
+      <button className="linkish" onClick={onBack}>
+        ← back
+      </button>
       <p className="meme-caption sm" style={{ fontSize: 16, marginTop: 10 }}>
-        {copy.home.header}
+        {filter === 'mine' ? copy.home.header : copy.home.othersHeader}
       </p>
       {isLoading && (
         <div className="card dashed">
           <div className="muted">{copy.home.loading}</div>
         </div>
       )}
-      {!isLoading && mine.length === 0 && (
-        <div className="card dashed">
-          <div className="muted">{copy.home.mineEmpty}</div>
-        </div>
-      )}
-      {mine.map((l) => card(l, true))}
-
-      <p className="meme-caption sm" style={{ fontSize: 16, marginTop: 14 }}>
-        {copy.home.othersHeader}
-      </p>
-      {!isLoading && others.length === 0 && (
+      {!isLoading && shown.length === 0 && (
         <div className="card dashed">
           <div className="muted" style={{ whiteSpace: 'pre-line' }}>
-            {copy.home.empty}
+            {filter === 'mine' ? copy.home.mineEmpty : copy.home.empty}
           </div>
         </div>
       )}
-      {others.map((l) => card(l, false))}
+      {shown.map((l) => (
+        <div key={l.id} className="card clickable" onClick={() => onSelect(l)}>
+          <b style={{ fontSize: 13 }}>{l.name}</b>
+          <div className="muted">{copy.home.meta(l.launches.length)}</div>
+          <div className="muted">{feeSplitCompact(l.lpRewardBps)}</div>
+          <div style={{ marginTop: 6 }}>
+            <button
+              className="linkish"
+              onClick={(e) => {
+                e.stopPropagation();
+                copyShare(l.id);
+              }}
+            >
+              {copy.home.share(`${APP_URL}/l/${l.id}`)}
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
-}
-
-function short(a: string) {
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }

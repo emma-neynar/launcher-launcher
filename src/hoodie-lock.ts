@@ -1,11 +1,9 @@
 import type { ClankerTokenV4 } from 'clanker-sdk';
 import { isAddressEqual } from 'viem';
-import { CHAIN_ID, HOODIE_ADDRESS } from './constants.js';
-import type { Launcher } from './registry.js';
-import { DEFAULT_TICK } from './tick.js';
-
-/** Width of the single LP position (matches Launcher.sol POSITION_WIDTH). */
-const POSITION_WIDTH = 110400;
+import { CHAIN_ID, HOODIE_ADDRESS } from './constants';
+import { POOL_FEE_BPS, isValidLpRewardBps } from './fees';
+import type { Launcher } from './registry';
+import { CANONICAL_OPENING_TICK, POSITION_WIDTH } from './tick';
 
 export class HoodiePairingViolation extends Error {
   constructor(offered: string) {
@@ -25,9 +23,9 @@ export type LaunchRequest = {
   /** Token creator: becomes tokenAdmin and majority reward recipient. */
   creator: `0x${string}`;
   /**
-   * Starting tick computed from a target market cap (see src/tick.ts). If
-   * omitted, falls back to DEFAULT_TICK (≈$30k calibrated 2026-07-20 — the
-   * caller should really pass a tick computed from the live $HOODIE price).
+   * Starting tick. Defaults to CANONICAL_OPENING_TICK (src/tick.ts) — the
+   * single whitelistable opening tick for $HOODIE pairs. Only the CLI's
+   * advanced --tick flag ever overrides this.
    */
   startingTick?: number;
   /**
@@ -49,8 +47,12 @@ export function buildLockedTokenConfig(launcher: Launcher, req: LaunchRequest): 
   ) {
     throw new HoodiePairingViolation(req.requestedPairedToken);
   }
+  if (!isValidLpRewardBps(launcher.lpRewardBps)) {
+    throw new Error(`Launcher "${launcher.id}" has an invalid lpRewardBps (${launcher.lpRewardBps})`);
+  }
 
-  const creatorBps = 10_000 - launcher.feeShareBps;
+  const creatorBps = 10_000 - launcher.lpRewardBps;
+  const tick = req.startingTick ?? CANONICAL_OPENING_TICK;
 
   return {
     name: req.name,
@@ -67,25 +69,25 @@ export function buildLockedTokenConfig(launcher: Launcher, req: LaunchRequest): 
     pool: {
       pairedToken: HOODIE_ADDRESS, // THE RULE — not a parameter.
       // The SDK's default tick (-230400) assumes a WETH pair; for $HOODIE it
-      // means ~10 HOODIE market cap. Use the computed tick instead, with one
+      // means ~10 HOODIE market cap. Use the canonical tick instead, with one
       // position starting exactly at it (SDK/factory requirement).
-      tickIfToken0IsClanker: req.startingTick ?? DEFAULT_TICK,
+      tickIfToken0IsClanker: tick,
       positions: [
         {
-          tickLower: req.startingTick ?? DEFAULT_TICK,
-          tickUpper: (req.startingTick ?? DEFAULT_TICK) + POSITION_WIDTH,
+          tickLower: tick,
+          tickUpper: tick + POSITION_WIDTH,
           positionBps: 10_000,
         },
       ],
     },
-    fees: { type: 'static', clankerFee: 100, pairedFee: 100 },
+    fees: { type: 'static', clankerFee: POOL_FEE_BPS, pairedFee: POOL_FEE_BPS },
     rewards: {
       recipients: [
         { admin: req.creator, recipient: req.creator, bps: creatorBps, token: 'Both' },
         {
           admin: launcher.feeRecipient,
           recipient: launcher.feeRecipient,
-          bps: launcher.feeShareBps,
+          bps: launcher.lpRewardBps,
           token: 'Both',
         },
       ],

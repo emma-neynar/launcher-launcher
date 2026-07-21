@@ -2,13 +2,15 @@
  * Regenerates the Mini App branding assets from the source art in
  * public/brand/. Run: node scripts/generate-brand-assets.mjs
  *
- *   icon.png         1024×1024  app-store icon (purple, mascot, wordmark)
+ *   icon.png         1024×1024  app-store icon (neon #CCFF00, mascot, wordmark)
  *   splash.png        200×200   splash logo (transparent, over #8A63D2)
  *   embed-image.png  1200×800   3:2 cast embed card (backdrop + caption)
  */
 import sharp from 'sharp';
 
-const PURPLE = '#8a63d2';
+// Icon background is brand neon; the splash screen keeps splashBackgroundColor
+// purple (#8a63d2) — set in the manifest route, not here.
+const NEON = '#ccff00';
 const BRAND = 'public/brand';
 
 // Impact with the same fallback chain as the app CSS. rsvg renders whichever
@@ -34,7 +36,7 @@ async function icon() {
     .resize(720, 720, { fit: 'inside' })
     .png()
     .toBuffer();
-  await sharp({ create: { width: 1024, height: 1024, channels: 4, background: PURPLE } })
+  await sharp({ create: { width: 1024, height: 1024, channels: 4, background: NEON } })
     .composite([
       { input: mascot, gravity: 'north', top: 60, left: Math.round((1024 - 720) / 2) },
       { input: svg(1024, 1024, memeText(['YO DAWG'], { x: 512, y: 950, size: 150 })), top: 0, left: 0 },

@@ -17,13 +17,36 @@
 export const TICK_SPACING = 200;
 /** Clanker v4 fixed total supply: 100 billion tokens. */
 export const TOTAL_SUPPLY = 100_000_000_000;
+
 /**
- * Contract fallback tick (must equal Launcher.sol DEFAULT_STARTING_TICK).
- * ≈ 6.2B $HOODIE market cap — roughly $30k when calibrated 2026-07-20 at
- * $HOODIE ≈ $4.8e-6. The UI always computes an explicit tick from the live
- * price instead of relying on this.
+ * THE canonical opening tick for every $HOODIE-paired launch shipped by this
+ * app. One fixed value, one central constant, so clanker.world can whitelist
+ * a single (pairedToken + tick) "expected position" and these launches never
+ * look unusual. Print the full position config with:
+ *   npm run expected-position
+ *
+ * Derivation: target the standard Clanker opening market cap
+ * (DEFAULT_MARKET_CAP_USD, ~$30k) at $HOODIE's live price. Price source:
+ * Dexscreener public API reading the HOODIE/WETH Uniswap v4 pool on Robinhood
+ * Chain (src/hoodie-price.ts — also stated in the UI). Calibrated 2026-07-21
+ * at $HOODIE ≈ $4.56e-6 → tick -27400 ≈ 6.6B $HOODIE ≈ $30k. The tick is
+ * FIXED at build time; the live price is only used for the USD display.
+ *
+ * TODO(dev answer pending): fixed tick vs a tick RANGE for clanker.world's
+ * expected positions. Shipping the fixed default; because every consumer
+ * reads this one constant, widening to a range later is a local change.
+ */
+export const CANONICAL_OPENING_TICK = -27400;
+
+/**
+ * Contract fallback tick (must equal Launcher.sol DEFAULT_STARTING_TICK —
+ * do not change without redeploying the optional trustless-mode wrapper).
+ * Off-chain paths always pass CANONICAL_OPENING_TICK explicitly.
  */
 export const DEFAULT_TICK = -27800;
+
+/** Width of the single LP position (matches Launcher.sol POSITION_WIDTH). */
+export const POSITION_WIDTH = 110400;
 /** Default USD starting market cap target (Clanker standard pools open ~$27-30k). */
 export const DEFAULT_MARKET_CAP_USD = 30_000;
 /** Uniswap v4 usable tick bounds (rounded to spacing). */

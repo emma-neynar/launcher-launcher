@@ -45,7 +45,4 @@ export const wagmiConfig = createConfig({
   connectors,
 });
 
-export const LAUNCHER_LAUNCHER_ADDRESS = (process.env.NEXT_PUBLIC_LAUNCHER_LAUNCHER_ADDRESS ||
-  '') as `0x${string}`;
-
 export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

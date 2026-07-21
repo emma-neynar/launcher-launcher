@@ -1,31 +1,34 @@
 'use client';
 
+import { Clanker } from 'clanker-sdk/v4';
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
-import { useAccount, usePublicClient, useReadContract, useWriteContract } from 'wagmi';
+import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { EXPLORER_URL } from '@/src/hoodie';
-import { launcherAbi } from '@/src/wrapper-abi';
-import {
-  DEFAULT_MARKET_CAP_USD,
-  DEFAULT_TICK,
-  TICK_SPACING,
-  marketCapForTick,
-  marketCapUsdForTick,
-  tickForMarketCapUsd,
-} from '@/src/tick';
+import { assertHoodieInCalldata, buildLockedTokenConfig } from '@/src/hoodie-lock';
 import { fetchHoodiePriceUsd, type HoodiePrice } from '@/src/hoodie-price';
+import type { Launcher } from '@/src/registry';
+import { CANONICAL_OPENING_TICK, marketCapForTick, marketCapUsdForTick } from '@/src/tick';
 import { copy } from '../lib/copy';
 import { APP_URL } from '../lib/wagmi';
+import { FeeSplit } from './fee-split';
 import { LockedPair } from './locked-pair';
 import { type PairingProof, proofFromLogs } from './verify-pairing';
 
 type Phase = 'form' | 'confirm' | 'launching' | 'success' | 'error';
 
 /**
- * Screens 5–9: the launch flow as its own little state machine.
- * form → confirm (modal) → launching (full-screen) → success | error.
- * The contract call and its arguments are untouched from the prototype —
- * this is a skin + copy pass only.
+ * Screens 5–9: the launch flow. OFF-CHAIN enforcement model (the primary
+ * shipped path): the user's own wallet signs a DIRECT Clanker v4 factory
+ * `deployToken()` call built by the clanker-sdk, with the $HOODIE pairing
+ * forced at the existing choke point — buildLockedTokenConfig writes the
+ * constant, assertHoodieInCalldata re-verifies the encoded calldata before
+ * the wallet is ever asked to sign.
+ *
+ * The opening tick is the fixed CANONICAL_OPENING_TICK (src/tick.ts): one
+ * whitelistable (pairedToken + tick) config for clanker.world. No market-cap
+ * or tick input exists on this screen; the live $HOODIE price (Dexscreener)
+ * is fetched only to show the tick's USD equivalent.
  */
 export function LaunchToken({
   launcher,
@@ -33,7 +36,7 @@ export function LaunchToken({
   onToast,
   onDone,
 }: {
-  launcher: `0x${string}`;
+  launcher: Launcher;
   onBack: () => void;
   onToast: (msg: string) => void;
   onDone: () => void;
@@ -42,23 +45,13 @@ export function LaunchToken({
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
-  const { data: launcherName } = useReadContract({
-    address: launcher,
-    abi: launcherAbi,
-    functionName: 'launcherName',
-  });
-
   const [phase, setPhase] = useState<Phase>('form');
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [image, setImage] = useState('');
   const [description, setDescription] = useState('');
-  const [marketCapUsd, setMarketCapUsd] = useState(String(DEFAULT_MARKET_CAP_USD));
-  const [manualTick, setManualTick] = useState('');
-  const [feeBps, setFeeBps] = useState('100');
 
   const [price, setPrice] = useState<HoodiePrice | null>(null);
-  const [priceError, setPriceError] = useState('');
 
   const [formError, setFormError] = useState('');
   const [isPairingError, setIsPairingError] = useState(false);
@@ -67,18 +60,9 @@ export function LaunchToken({
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [lineIdx, setLineIdx] = useState(0);
 
-  async function loadPrice() {
-    setPriceError('');
-    try {
-      setPrice(await fetchHoodiePriceUsd());
-    } catch (e) {
-      setPrice(null);
-      setPriceError(e instanceof Error ? e.message : String(e));
-    }
-  }
+  // USD display only — the tick itself is fixed and never depends on this.
   useEffect(() => {
-    loadPrice();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchHoodiePriceUsd().then(setPrice).catch(() => {});
   }, []);
 
   // Rotate the meme lines while the launching screen is up.
@@ -91,68 +75,51 @@ export function LaunchToken({
     return () => clearInterval(t);
   }, [phase]);
 
-  // USD market cap -> starting tick via the live $HOODIE price. Manual tick overrides.
-  const { tick, tickError } = useMemo(() => {
-    if (manualTick !== '') {
-      const t = Number(manualTick);
-      if (!Number.isInteger(t) || t % TICK_SPACING !== 0) {
-        return { tick: null, tickError: `manual tick must be a multiple of ${TICK_SPACING}` };
-      }
-      return { tick: t, tickError: '' };
-    }
-    if (!price) {
-      return {
-        tick: null,
-        tickError: 'no live $HOODIE price — retry the fetch or set a manual tick below.',
-      };
-    }
-    try {
-      return { tick: tickForMarketCapUsd(Number(marketCapUsd), price.priceUsd), tickError: '' };
-    } catch (e) {
-      return { tick: null, tickError: e instanceof Error ? e.message : String(e) };
-    }
-  }, [marketCapUsd, manualTick, price]);
-
-  const mcapDisplay = useMemo(() => {
-    if (tick !== null && price) {
-      return `$${marketCapUsdForTick(tick, price.priceUsd).toLocaleString(undefined, {
+  const openingHoodie = useMemo(
+    () =>
+      marketCapForTick(CANONICAL_OPENING_TICK).toLocaleString(undefined, {
         maximumFractionDigits: 0,
-      })}`;
-    }
-    const n = Number(marketCapUsd);
-    return Number.isFinite(n) ? `$${n.toLocaleString()}` : marketCapUsd;
-  }, [tick, price, marketCapUsd]);
+      }),
+    []
+  );
+  const openingUsd = price
+    ? `$${marketCapUsdForTick(CANONICAL_OPENING_TICK, price.priceUsd).toLocaleString(undefined, {
+        maximumFractionDigits: 0,
+      })}`
+    : null;
+  const mcapDisplay = openingUsd ?? `${openingHoodie} $HOODIE`;
 
   async function launch() {
-    if (tick === null) return;
     setPhase('launching');
     setFormError('');
     setProof(null);
     setTxHash(undefined);
     try {
-      const fee = Math.round(Number(feeBps));
-      if (!Number.isInteger(fee) || fee < 0 || fee > 1000)
-        throw new Error('fee must be 0–1000 bps');
       if (!address) throw new Error('connect a wallet first');
 
+      // 1. Config with pairedToken hardcoded to $HOODIE + the canonical tick.
+      const config = buildLockedTokenConfig(launcher, {
+        name,
+        symbol,
+        image: image || undefined,
+        description: description || undefined,
+        creator: address,
+      });
+
+      // 2. SDK encodes the raw factory deployToken() call (read-only).
+      const clanker = new Clanker({ publicClient: publicClient! });
+      const tx = await clanker.getDeployTransaction(config);
+
+      // 3. Defense in depth: re-verify $HOODIE in the ENCODED calldata.
+      assertHoodieInCalldata(tx.args[0]);
+
+      // 4. The user's own wallet signs the direct factory call.
       const hash = await writeContractAsync({
-        address: launcher,
-        abi: launcherAbi,
-        functionName: 'launch',
-        args: [
-          {
-            // NOTE: no paired token argument exists — the contract injects $HOODIE.
-            name,
-            symbol,
-            image,
-            metadata: description ? JSON.stringify({ description }) : '',
-            context: JSON.stringify({ interface: 'Launcher Launcher Mini App' }),
-            tokenAdmin: address,
-            startingTick: tick,
-            clankerFeeBps: fee,
-            pairedFeeBps: fee,
-          },
-        ],
+        address: tx.address,
+        abi: tx.abi,
+        functionName: tx.functionName,
+        args: tx.args,
+        value: tx.value,
       });
       setTxHash(hash);
       onToast(copy.toasts.txSubmitted);
@@ -161,6 +128,13 @@ export function LaunchToken({
       if (!p) throw new Error('launch confirmed but no TokenCreated event found');
       setProof(p);
       setPhase('success');
+
+      // Record in the registry (display-only; failure doesn't affect the launch).
+      fetch(`/api/launchers/${launcher.id}/launches`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, symbol, token: p.token, txHash: hash }),
+      }).catch(() => {});
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/user rejected|denied|user cancelled/i.test(msg)) {
@@ -176,7 +150,7 @@ export function LaunchToken({
   }
 
   async function share() {
-    const url = `${APP_URL}/l/${launcher}`;
+    const url = `${APP_URL}/l/${launcher.id}`;
     const text = copy.success.shareCast(url);
     try {
       const { sdk } = await import('@farcaster/miniapp-sdk');
@@ -300,7 +274,7 @@ export function LaunchToken({
       <h1 className="meme-caption" style={{ fontSize: 19 }}>
         {copy.launch.title}
       </h1>
-      {launcherName ? <p className="meme-sub">via “{launcherName}”</p> : null}
+      <p className="meme-sub">via “{launcher.name}”</p>
 
       <div className="row">
         <div className="field grow">
@@ -327,53 +301,12 @@ export function LaunchToken({
 
       <div className="field">
         <label>{copy.launch.mcapLabel}</label>
-        <input
-          className="input"
-          value={marketCapUsd}
-          onChange={(e) => setMarketCapUsd(e.target.value)}
-          inputMode="decimal"
-          disabled={manualTick !== ''}
-        />
-        <div className="hint">{copy.launch.mcapHint}</div>
-        {price ? (
-          <div className="hint">
-            $HOODIE ≈ <span className="mono">${price.priceUsd.toPrecision(4)}</span> ({price.source}
-            ){' · '}
-            <button
-              className="linkish"
-              onClick={(e) => {
-                e.preventDefault();
-                loadPrice();
-              }}
-            >
-              refresh
-            </button>
-            {tick !== null && (
-              <>
-                {' · '}opens ≈{' '}
-                {marketCapForTick(tick).toLocaleString(undefined, { maximumFractionDigits: 0 })}{' '}
-                $HOODIE ({mcapDisplay})
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="warnbar">
-            no live $HOODIE price{priceError ? ` (${priceError})` : ''}.{' '}
-            <button
-              className="linkish"
-              onClick={(e) => {
-                e.preventDefault();
-                loadPrice();
-              }}
-            >
-              retry
-            </button>{' '}
-            — or set a manual tick in the extra knobs.
-          </div>
-        )}
+        <div className="locked">{copy.launch.mcapLocked(mcapDisplay)}</div>
       </div>
 
       <LockedPair />
+
+      <FeeSplit lpRewardBps={launcher.lpRewardBps} />
 
       <details className="advanced">
         <summary>{copy.launch.advanced}</summary>
@@ -390,43 +323,14 @@ export function LaunchToken({
           <label>description</label>
           <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
-        <div className="field">
-          <label>LP fee (bps, each side, max 1000)</label>
-          <input
-            className="input"
-            value={feeBps}
-            onChange={(e) => setFeeBps(e.target.value)}
-            inputMode="numeric"
-          />
-        </div>
-        <div className="field">
-          <label>manual tick override (leave empty to use market cap)</label>
-          <input
-            className="input"
-            value={manualTick}
-            onChange={(e) => setManualTick(e.target.value.trim())}
-            placeholder={`contract fallback ${DEFAULT_TICK}`}
-          />
-          {manualTick !== '' && tick !== null && (
-            <div className="warnbar" style={{ marginTop: 6 }}>
-              manual tick {tick} ≈{' '}
-              {marketCapForTick(tick).toLocaleString(undefined, { maximumFractionDigits: 0 })} $HOODIE
-              {price
-                ? ` (≈ ${mcapDisplay})`
-                : ' (USD unknown — no live price)'}{' '}
-              opening market cap. you&apos;re setting the raw starting price, dawg.
-            </div>
-          )}
-        </div>
       </details>
 
-      {tickError && <p className="error-code">error: {tickError}</p>}
       {formError && <p className="error-code">error: {formError}</p>}
 
       <button
         className="btn neon bottom"
         onClick={() => setPhase('confirm')}
-        disabled={!name || !symbol || tick === null}
+        disabled={!name || !symbol || !address}
       >
         {copy.launch.button}
       </button>

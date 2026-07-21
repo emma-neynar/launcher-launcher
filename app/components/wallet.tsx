@@ -46,9 +46,40 @@ export function useFarcasterChainSupport(connectorId: string | undefined) {
   return supported;
 }
 
+/**
+ * Surface detection: null until sdk.isInMiniApp() resolves (or false on
+ * error) — same pattern as app/providers.tsx. Used to hide the Farcaster
+ * connector in a plain browser, where it is a dead end.
+ */
+function useIsInMiniApp() {
+  const [inMiniApp, setInMiniApp] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import('@farcaster/miniapp-sdk')
+      .then(async ({ sdk }) => {
+        const result = await sdk.isInMiniApp();
+        if (!cancelled) setInMiniApp(result);
+      })
+      .catch(() => {
+        if (!cancelled) setInMiniApp(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return inMiniApp;
+}
+
 /** Screen 1 — full-bleed hero with the canonical caption and connect buttons. */
 export function ConnectHero() {
   const { connect, connectors, isPending } = useConnect();
+  const inMiniApp = useIsInMiniApp();
+  // Hide nothing until detection resolves; only filter once we know we're on
+  // the open web (inMiniApp === false), where the Farcaster connector can't
+  // connect to anything.
+  const visible = connectors.filter((c) => c.id !== 'farcaster' || inMiniApp !== false);
 
   return (
     <div className="hero">
@@ -57,13 +88,10 @@ export function ConnectHero() {
           {copy.connect.captionTop}
         </h1>
         <div style={{ flex: 1 }} />
-        <p className="meme-caption sm" style={{ fontSize: 16, marginBottom: 8 }}>
+        <p className="meme-caption sm" style={{ fontSize: 16, marginBottom: 12 }}>
           {copy.connect.captionBottom}
         </p>
-        <p className="meme-sub" style={{ marginBottom: 10 }}>
-          {copy.connect.sub}
-        </p>
-        {connectors.map((c) => (
+        {visible.map((c) => (
           <button
             key={c.uid}
             className="btn"
@@ -73,7 +101,7 @@ export function ConnectHero() {
           >
             {isPending
               ? copy.connect.connecting
-              : connectors.length > 1
+              : visible.length > 1
                 ? `plug in w/ ${c.name.toLowerCase()} →`
                 : copy.connect.button}
           </button>
@@ -122,7 +150,6 @@ export function ChainGate({ onToast }: { onToast: (msg: string) => void }) {
           {copy.addChain.title}
         </h1>
         <p className="meme-sub">{blocked ? copy.addChain.blockedBody : copy.addChain.body}</p>
-        {!blocked && <div className="warnbar">{copy.addChain.warn}</div>}
         {!blocked && error && (
           <p className="error-code">chain switch failed: {error.message.split('\n')[0]}</p>
         )}

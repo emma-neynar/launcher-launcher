@@ -34,6 +34,7 @@
   "include": [
     "src",
     "app",
+    "app/.well-known/farcaster.json/route.ts",
     "next-env.d.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"

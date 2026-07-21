@@ -1,7 +1,9 @@
 /**
  * The full copy deck for the "yo dawg" brand pass. Strings live here (and only
- * here) so line-edits never touch component code. Source: the creative
- * direction doc §8 — use verbatim unless the owner supplies alternates.
+ * here) so line-edits never touch component code.
+ *
+ * Kept deliberately terse: screens carry the minimum, and everything that
+ * needs explaining lives in the "how it works" section (copy.info).
  */
 
 export const copy = {
@@ -9,48 +11,59 @@ export const copy = {
     captionTop: 'yo dawg, i heard\nyou like launchers',
     captionBottom:
       'so i put a launcher launcher\nin your launcher so you can\nlaunch a launcher while you launch',
-    sub: 'everything you make pairs with $HOODIE. house rule. only rule.',
     button: 'plug in, dawg →',
     connecting: 'shaking hands…',
   },
 
   addChain: {
     title: 'add robinhood\nchain, dawg',
-    body: "your wallet's missing robinhood chain (4663). one tap and you're in. on the farcaster app? you're already in, dawg.",
-    warn: 'one tap. nothing scary. we promise.',
+    body: "your wallet's missing robinhood chain (4663). one tap.",
     button: 'add the chain',
     // Honest fallback when the host wallet genuinely cannot reach 4663
     // (the Farcaster embedded wallet cannot add custom chains).
-    blockedBody:
-      "the farcaster wallet can't add robinhood chain yet. open this in your browser with metamask or rabby and you're in, dawg.",
+    blockedBody: "the farcaster wallet can't reach robinhood chain yet. open this in a browser with metamask or rabby.",
     blockedButton: 'copy the link',
   },
 
   home: {
+    // Mascot hero (the connected landing screen).
+    caption: 'launch a launcher\nwhile you launch',
+    mineOption: (n?: number) => (n === undefined ? 'your launchers' : `your launchers (${n})`),
+    othersOption: (n?: number) =>
+      n === undefined ? "everyone else's launchers" : `everyone else's launchers (${n})`,
+    // List screens.
     header: 'your launchers',
     othersHeader: "everyone else's launchers",
-    meta: (n: number, pct: string) =>
-      `${n} token${n === 1 ? '' : 's'} launched · you keep ${pct}%`,
-    othersMeta: (n: number, pct: string) =>
-      `${n} token${n === 1 ? '' : 's'} launched · launcher keeps ${pct}%`,
-    pill: '🔒 pairs everything w/ $HOODIE',
-    empty: 'no other launchers yet.\nbe the first to put a launcher in your launcher.',
-    mineEmpty: 'none yet, dawg. the button below fixes that.',
-    loading: 'loading the registry…',
+    meta: (n: number) => `${n} token${n === 1 ? '' : 's'} launched`,
+    empty: 'no launchers yet.\nbe the first, dawg.',
+    mineEmpty: 'none yet. the button below fixes that.',
+    loading: 'loading…',
     share: (url: string) => `share: ${url}`,
     button: '+ make a launcher',
-    verifyLink: 'prove a launch is 100% hoodie →',
+    verifyLink: 'verify a launch →',
+    infoLink: 'how it works →',
   },
 
   create: {
     title: 'spin up a launcher',
-    sub: "so people can launch launchers off your launcher. yes it's turtles all the way down. no we won't stop.",
     nameLabel: 'name your launcher',
-    feeLabel: 'who catches the fees? 💰',
-    cutLabel: 'your cut of the LP rewards',
-    cutHint: (rest: number) => `the other ${rest}% goes to whoever launches tokens through you`,
+    // The ONE knob (lpRewardBps as a %). Everything else is forced.
+    cutLabel: 'your cut of the reward pool 💰',
+    cutHint: (max: number) => `0–${max}%. the only knob.`,
+    feeRecipientNote: (addr: string) => `pays out to ${addr}`,
     button: 'make it so',
     successToast: 'launcher launched. very meta. 🟢',
+  },
+
+  // Gross fee split — of ALL LP fees a pool earns, wallet-accurate. Clanker's
+  // documented 20% protocol fee is ALWAYS an explicit line item (src/fees.ts).
+  fees: {
+    header: 'who gets the fees',
+    clankerLine: (pct: string) => `clanker protocol · ${pct}% (fixed)`,
+    creatorLine: (pct: string) => `token creator · ${pct}%`,
+    launcherLine: (pct: string) => `launcher operator · ${pct}%`,
+    compact: (clanker: string, creator: string, launcher: string) =>
+      `fees: clanker ${clanker}% · creator ${creator}% · launcher ${launcher}%`,
   },
 
   launch: {
@@ -58,21 +71,20 @@ export const copy = {
     nameLabel: 'name',
     tickerLabel: 'ticker',
     mcapLabel: 'opening market cap',
-    mcapHint: 'we convert to $HOODIE for you at today’s price',
+    // The opening tick is fixed (CANONICAL_OPENING_TICK, src/tick.ts) so
+    // clanker.world can whitelist one expected position. Not user-editable.
+    mcapLocked: (usd: string) => `≈ ${usd} — same for every launch`,
     pairedLabel: 'paired with',
-    locked: '🔒 $HOODIE — not a field, dawg. it’s the whole bit.',
-    tooltipTrigger: 'why $HOODIE?',
-    tooltip:
-      'why $HOODIE? it’s the one immutable rule — every token launched here pairs with it, forever. we couldn’t change it if we wanted to.',
+    locked: '🔒 $HOODIE — not a field, dawg.',
     button: 'review the launch →',
-    advanced: 'extra knobs (optional)',
+    advanced: 'extra details (optional)',
   },
 
   confirm: {
     title: 'last look',
     body: (ticker: string, mcap: string) =>
       `launching ${ticker}, paired to $HOODIE, on robinhood chain. opens around ${mcap}.`,
-    warn: "can't un-launch a token, dawg. this one's forever.",
+    warn: "can't un-launch a token, dawg.",
     cancel: 'wait, no',
     confirm: 'send it 🚀',
   },
@@ -102,24 +114,54 @@ export const copy = {
   error: {
     title: 'nice try, dawg',
     // For actual pairing violations — the whole bit.
-    pairingBody:
-      "you tried to swap $HOODIE for another pair. the contract said no. it'll always say no. that's the whole point.",
+    pairingBody: "you tried to ditch $HOODIE. the contract said no. it always says no.",
     pairingCode: 'error: HoodiePairingViolation',
     // Honest variant for everything else (rejected tx, gas, rpc…).
     genericTitle: 'that didn’t launch, dawg',
-    genericBody: 'the chain said no this time. nothing was launched — fix it up and send it again.',
+    genericBody: 'the chain said no. nothing was launched — run it back.',
     button: 'fine, keep the hoodie',
     genericButton: 'run it back',
   },
 
   verify: {
     title: 'prove the pairing',
-    empty: 'paste a launch transaction and we’ll prove it’s 100% hoodie.',
+    empty: 'paste a launch tx hash.',
     label: 'launch transaction hash',
     button: 'verify it, dawg',
     checking: 'checking…',
     verified: 'proven: 100% hoodie',
     failed: 'NOT paired with $HOODIE',
+  },
+
+  // The "more info" section — ALL the explanation lives here so the screens
+  // themselves can stay near-empty.
+  info: {
+    title: 'how it works',
+    sections: {
+      bit: {
+        h: 'the bit',
+        body: 'you spin up a launcher. other people launch tokens through it. you skim a cut of the fees. yes, it’s a launcher launcher. recursion is the point.',
+      },
+      rule: {
+        h: 'the rule',
+        body: (addr: string) =>
+          `every token launched here is paired with $HOODIE (${addr}) on robinhood chain. the pairing is written into the deploy call and re-checked in the encoded transaction before your wallet signs — there is no field to change it. any launch can be verified from the home screen: we decode the clanker factory’s own TokenCreated event straight off the chain.`,
+      },
+      fees: {
+        h: 'the fees',
+        body: (clanker: string, creator: string, launcher: string) =>
+          `of every swap fee a pool earns: the clanker protocol keeps ${clanker}% (fixed, documented). the remaining 80% splits between the token creator and the launcher operator — the operator’s cut is the one thing a launcher’s creator chooses. at the default that lands at ${creator}% creator / ${launcher}% launcher. all numbers shown in this app are gross, nothing hidden.`,
+      },
+      mcap: {
+        h: 'the opening market cap',
+        body: (usd: string) =>
+          `every token opens at the same standard tick — about ${usd} market cap, converted to $HOODIE at the live price (Dexscreener, HOODIE/WETH pool). one standard opening keeps every pool shaped the same, so launches from here don’t get flagged as unusual.`,
+      },
+      wallet: {
+        h: 'wallets + chain',
+        body: 'everything runs on robinhood chain (4663), signed by your own wallet — this app never holds keys or funds. metamask or rabby in a browser works best; the farcaster in-app wallet can’t reach 4663 yet, so inside farcaster you’ll get a link to open in your browser instead.',
+      },
+    },
   },
 
   toasts: {

@@ -7,9 +7,9 @@ import {
   createWalletClient,
 } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { CHAIN, EXPLORER_URL, HOODIE_ADDRESS } from './constants.js';
-import { type LaunchRequest, assertHoodieInCalldata, buildLockedTokenConfig } from './hoodie-lock.js';
-import type { Launcher } from './registry.js';
+import { CHAIN, EXPLORER_URL, HOODIE_ADDRESS } from './constants';
+import { type LaunchRequest, assertHoodieInCalldata, buildLockedTokenConfig } from './hoodie-lock';
+import type { Launcher } from './registry';
 
 const rpcUrl = process.env.RPC_URL; // undefined -> chain default RPC
 
