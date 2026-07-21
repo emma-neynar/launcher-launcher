@@ -21,6 +21,10 @@ Enforced in depth, in `src/hoodie-lock.ts`:
 
 No custom contracts were needed: the pairing is a parameter of Clanker's own `deployToken()` call, so locking the parameter at the only choke point (plus calldata verification) gives the guarantee without forking or redeploying anything.
 
+Pairing with a non-whitelisted token is explicitly allowed by the protocol: the official [supported quote tokens](https://clanker.world/docs/references/supported-quote-tokens) list only applies to the @clanker bot and API deployments — "users may permissionlessly interact with the Clanker token factory to deploy tokens paired with arbitrary quote tokens and that start at arbitrary market caps." This repo takes that permissionless factory path via the SDK, which is why the $HOODIE pairing simulates successfully.
+
+One tuning note: the pool starts at the SDK's default initial tick (`-230400`), which prices the starting market cap at roughly 10 **$HOODIE** (the per-quote-token ticks in the docs table show how other pairs calibrate this). For a real launch you'd pick a tick based on $HOODIE's market price; for the prototype the default is fine.
+
 ## Safety posture
 
 - Clanker is consumed **only** as the versioned npm dependency `clanker-sdk@^4.2.18`. Nothing in any Clanker repo, contract, indexer, database, bot, or frontend is touched.
