@@ -39,7 +39,14 @@ print(run['transactions'][-1]['hash'])")
 echo "    launch tx: $LAUNCH_TX"
 
 RECEIPT_FILE=$(mktemp)
-cast receipt "$LAUNCH_TX" --rpc-url "$LOCAL" --json > "$RECEIPT_FILE"
+# Retry: the receipt can land a beat after broadcast returns on a fresh fork.
+for i in $(seq 1 10); do
+  if cast receipt "$LAUNCH_TX" --rpc-url "$LOCAL" --json > "$RECEIPT_FILE" 2>/dev/null \
+     && python3 -c "import json,sys; sys.exit(0 if json.load(open('$RECEIPT_FILE')).get('logs') else 1)"; then
+    break
+  fi
+  sleep 1
+done
 python3 - "$HOODIE" "$FACTORY" "$TOPIC0" "$RECEIPT_FILE" <<'PY'
 import json, sys
 hoodie, factory, topic0 = (a.lower() for a in sys.argv[1:4])

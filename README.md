@@ -60,10 +60,19 @@ Next.js app in `app/`, using `@farcaster/miniapp-sdk` (0.3.x) + `@farcaster/mini
 
 ### Run it against the fork
 
+Verified from a **clean checkout** (fresh `git clone` + these exact commands): `npm install`, `npx tsc --noEmit`, `forge test` in `contracts/` (14/14), `npm run fork:demo`, and `npm run build` all pass. Prereqs: Node 20+, [Foundry](https://book.getfoundry.sh/getting-started/installation).
+
 ```bash
+git clone <this repo> && cd launcher-launcher
 cp .env.example .env
 npm install
 
+# Full contract proof, one command each:
+npm run test:contracts   # 14 Foundry tests: immutability + pairing + fee path (fork)
+npm run fork:demo        # Anvil fork -> deploy wrapper -> createLauncher -> launch
+                         # -> decode factory TokenCreated -> PROVEN paired with $HOODIE
+
+# Run the mini app against a persistent local fork:
 # 1. fork + deploy the wrapper locally
 anvil --fork-url https://rpc.mainnet.chain.robinhood.com &
 cd contracts && forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 \
@@ -76,6 +85,14 @@ cd contracts && forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545
 # 3. run the app
 npm run dev   # http://localhost:3000
 ```
+
+### Wallet connectors
+
+Connector order in `app/lib/wagmi.ts` makes an **external wallet the primary signing path** (the Farcaster host wallet cannot reach chain 4663 — see the known limitation above):
+
+1. `injected()` — MetaMask/Rabby/etc.; wagmi auto-adds Robinhood Chain via `wallet_addEthereumChain`.
+2. `walletConnect(...)` — enabled when `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is set (free id from [cloud.reown.com](https://cloud.reown.com)); recommended for mobile.
+3. `farcasterMiniApp()` — kept for identity/context inside Farcaster clients; the app detects the missing chain via `sdk.getChains()` and shows a friendly "open in a browser with an external wallet" banner instead of a dead switch button or a chain-switch loop.
 
 ### Manifest + embed
 
@@ -115,6 +132,6 @@ The CLI enforces the same rule in TypeScript (`src/hoodie-lock.ts`): hardcoded c
 ## Go-live checklist (the remaining human steps)
 
 1. **Deploy the wrapper to mainnet:** fund a fresh dev wallet with a little ETH on Robinhood Chain, put its key in `.env` as `PRIVATE_KEY`, then `npm run deploy:live` (asks you to type `DEPLOY`). Put the printed address in `.env` as `NEXT_PUBLIC_LAUNCHER_LAUNCHER_ADDRESS` and set `NEXT_PUBLIC_RPC_URL=https://rpc.mainnet.chain.robinhood.com`.
-2. **Host the app** on a stable domain (the domain is the Mini App's permanent identity). Set `NEXT_PUBLIC_APP_URL=https://yourdomain`. Add a real 1024×1024 PNG at `public/icon.png` and a 3:2 (≥600×400) `public/embed-image.png`, and fill the real URLs into `public/.well-known/farcaster.json`.
+2. **Host the app** on a stable domain (the domain is the Mini App's permanent identity). Set `NEXT_PUBLIC_APP_URL=https://yourdomain`. Add a real 1024×1024 PNG at `public/icon.png` and a 3:2 (≥600×400) `public/embed-image.png` (placeholders are committed), and fill the real URLs into `public/.well-known/farcaster.json`. Optionally set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` so mobile users can connect an external wallet via WalletConnect.
 3. **Sign the manifest:** open the Warpcast Mini App Manifest Tool (`https://farcaster.xyz/~/developers/mini-apps/manifest`), enter your domain, sign with the **Farcaster custody key of the owning account**, and replace the `_TODO_accountAssociation` key in `public/.well-known/farcaster.json` with the generated `accountAssociation` object. This cannot be faked or automated — only the account owner can produce it.
 4. Cast the app URL (or any `/l/<launcher>` URL) — it renders as a launchable Mini App card.
