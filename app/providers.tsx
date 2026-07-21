@@ -10,14 +10,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Dismiss the Farcaster splash screen once the app has mounted.
-    // Dynamic import so the SDK is only loaded client-side. In a plain
-    // browser (no Farcaster host) sdk.isInMiniApp() resolves false within
-    // ~1s and we skip ready() entirely; the trailing catch keeps any host
-    // communication failure from surfacing.
+    // Dynamic import so the SDK is only loaded client-side.
+    //
+    // ready() is called unconditionally: gating it on sdk.isInMiniApp() broke
+    // the web developer preview, because isInMiniApp() races the host context
+    // handshake against a hard 1s timeout and returns a false negative when
+    // the host responds slowly (e.g. via a tunnel). In a plain browser tab
+    // ready() is a harmless postMessage to window.parent (self) that never
+    // rejects, so there is no need to detect the environment first.
     import('@farcaster/miniapp-sdk')
-      .then(async ({ sdk }) => {
-        if (await sdk.isInMiniApp()) await sdk.actions.ready();
-      })
+      .then(({ sdk }) => sdk.actions.ready())
       .catch(() => {});
   }, []);
 

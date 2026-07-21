@@ -47,18 +47,35 @@ export function useFarcasterChainSupport(connectorId: string | undefined) {
 }
 
 /**
- * Surface detection: null until sdk.isInMiniApp() resolves (or false on
- * error) — same pattern as app/providers.tsx. Used to hide the Farcaster
+ * Surface detection: null until resolved. Used to hide the Farcaster
  * connector in a plain browser, where it is a dead end.
+ *
+ * We deliberately do NOT use sdk.isInMiniApp(): it races the host context
+ * handshake against a hard 1s timeout, which yields false negatives when the
+ * host responds slowly (e.g. the web dev preview over a Cloudflare tunnel).
+ * Instead: a plain top-level browser tab is detected synchronously (instant
+ * false), and anything that might be a host (iframe / RN WebView) waits on
+ * sdk.context with a generous 10s timeout before giving up.
  */
 function useIsInMiniApp() {
   const [inMiniApp, setInMiniApp] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Not an iframe and not a React Native WebView: definitely the open web.
+    if (
+      window === window.parent &&
+      !(window as { ReactNativeWebView?: unknown }).ReactNativeWebView
+    ) {
+      setInMiniApp(false);
+      return;
+    }
     import('@farcaster/miniapp-sdk')
       .then(async ({ sdk }) => {
-        const result = await sdk.isInMiniApp();
+        const result = await Promise.race([
+          sdk.context.then((ctx) => Boolean(ctx)),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10_000)),
+        ]);
         if (!cancelled) setInMiniApp(result);
       })
       .catch(() => {
