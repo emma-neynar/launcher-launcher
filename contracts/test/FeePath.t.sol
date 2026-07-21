@@ -190,12 +190,17 @@ contract FeePathForkTest is Test {
             "split must match configured rewardBps"
         );
 
-        // 5. Claim: recipient actually RECEIVES the ERC20. Claim is permissionless
-        //    but always pays the feeOwner.
-        uint256 before = hoodie.balanceOf(launcherOwner);
+        // 5. Claim for BOTH recipients: each actually RECEIVES the ERC20.
+        //    Claim is permissionless to trigger but always pays the feeOwner.
+        uint256 ownerBefore = hoodie.balanceOf(launcherOwner);
         feeLocker.claim(launcherOwner, RobinhoodClanker.HOODIE);
-        assertEq(hoodie.balanceOf(launcherOwner) - before, recipientFees, "claimed HOODIE lands with feeRecipient");
-        assertEq(feeLocker.availableFees(launcherOwner, RobinhoodClanker.HOODIE), 0, "claim drains the balance");
+        assertEq(hoodie.balanceOf(launcherOwner) - ownerBefore, recipientFees, "claimed HOODIE lands with feeRecipient");
+        assertEq(feeLocker.availableFees(launcherOwner, RobinhoodClanker.HOODIE), 0, "claim drains feeRecipient balance");
+
+        uint256 creatorBefore = hoodie.balanceOf(user);
+        feeLocker.claim(user, RobinhoodClanker.HOODIE);
+        assertEq(hoodie.balanceOf(user) - creatorBefore, creatorFees, "claimed HOODIE lands with creator");
+        assertEq(feeLocker.availableFees(user, RobinhoodClanker.HOODIE), 0, "claim drains creator balance");
     }
 
     /// With lpRewardBps = 0 the creator is the sole recipient — 100% of fees.

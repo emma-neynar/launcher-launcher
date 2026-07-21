@@ -1,6 +1,6 @@
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
-import { http, createConfig } from 'wagmi';
-import { injected } from 'wagmi/connectors';
+import { http, createConfig, type CreateConnectorFn } from 'wagmi';
+import { injected, walletConnect } from 'wagmi/connectors';
 import { defineChain } from 'viem';
 import { CHAIN_ID, DEFAULT_RPC_URL, EXPLORER_URL } from '@/src/hoodie';
 
@@ -15,12 +15,34 @@ export const robinhoodChain = defineChain({
   blockExplorers: { default: { name: 'Blockscout', url: EXPLORER_URL } },
 });
 
+// Primary signing path is an EXTERNAL wallet (injected / WalletConnect) since
+// the Farcaster host wallet cannot reach chain 4663 (see components/wallet.tsx).
+// WalletConnect needs a (free) project id from https://cloud.reown.com — the
+// connector is only registered when NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is set.
+const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
+
+const connectors: CreateConnectorFn[] = [
+  injected(),
+  ...(WALLETCONNECT_PROJECT_ID
+    ? [
+        walletConnect({
+          projectId: WALLETCONNECT_PROJECT_ID,
+          metadata: {
+            name: 'Launcher Launcher',
+            description: 'Every token pairs with $HOODIE on Robinhood Chain',
+            url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+            icons: [],
+          },
+        }),
+      ]
+    : []),
+  farcasterMiniApp(),
+];
+
 export const wagmiConfig = createConfig({
   chains: [robinhoodChain],
   transports: { [robinhoodChain.id]: http(RPC_URL) },
-  // farcasterMiniApp inside a Farcaster client; injected() as a dev fallback
-  // when opening the app in a plain browser against the Anvil fork.
-  connectors: [farcasterMiniApp(), injected()],
+  connectors,
 });
 
 export const LAUNCHER_LAUNCHER_ADDRESS = (process.env.NEXT_PUBLIC_LAUNCHER_LAUNCHER_ADDRESS ||

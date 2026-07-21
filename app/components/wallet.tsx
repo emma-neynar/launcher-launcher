@@ -51,6 +51,18 @@ export function WalletBar() {
   const { disconnect } = useDisconnect();
   const { switchChain, isPending: switching, error: switchError } = useSwitchChain();
   const farcasterSupports4663 = useFarcasterChainSupport(connector?.id);
+  const [inMiniApp, setInMiniApp] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { sdk } = await import('@farcaster/miniapp-sdk');
+        setInMiniApp(await sdk.isInMiniApp());
+      } catch {
+        /* not in a mini app host */
+      }
+    })();
+  }, []);
 
   if (!isConnected) {
     return (
@@ -59,6 +71,13 @@ export function WalletBar() {
         <p className="muted">
           Connect your own wallet — you sign every transaction. This app never holds a key.
         </p>
+        {inMiniApp && (
+          <p className="warn">
+            Heads up: the Farcaster in-app wallet cannot use Robinhood Chain (it cannot add custom
+            chains). To launch tokens, open this app in your browser and connect an external wallet
+            (MetaMask, Rabby, WalletConnect, …).
+          </p>
+        )}
         {connectors.map((c) => (
           <button key={c.uid} onClick={() => connect({ connector: c })} disabled={isPending} style={{ marginRight: 8 }}>
             Connect {c.name}
