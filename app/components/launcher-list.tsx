@@ -69,7 +69,7 @@ export function LauncherList({
       <button className="linkish" onClick={onBack}>
         ← back
       </button>
-      <p className="meme-caption sm" style={{ fontSize: 16, marginTop: 10 }}>
+      <p className="meme-caption" style={{ fontSize: 16, marginTop: 10 }}>
         {filter === 'mine' ? copy.home.header : copy.home.othersHeader}
       </p>
       {isLoading && (
@@ -89,6 +89,9 @@ export function LauncherList({
           <b style={{ fontSize: 13 }}>{l.name}</b>
           <div className="muted">{copy.home.meta(l.launches.length)}</div>
           <div className="muted">{feeSplitCompact(l.lpRewardBps)}</div>
+          <div style={{ marginTop: 8 }}>
+            <span className="pill">{copy.home.pill}</span>
+          </div>
           <div style={{ marginTop: 6 }}>
             <button
               className="linkish"

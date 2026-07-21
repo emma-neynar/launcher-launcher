@@ -84,11 +84,11 @@ export function ConnectHero() {
   return (
     <div className="hero">
       <div className="hero-content">
-        <h1 className="meme-caption" style={{ fontSize: 26 }}>
+        <h1 className="meme-caption" style={{ fontSize: 22 }}>
           {copy.connect.captionTop}
         </h1>
         <div style={{ flex: 1 }} />
-        <p className="meme-caption sm" style={{ fontSize: 16, marginBottom: 12 }}>
+        <p className="meme-caption" style={{ fontSize: 15, marginBottom: 12 }}>
           {copy.connect.captionBottom}
         </p>
         {visible.map((c) => (

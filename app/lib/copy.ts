@@ -6,11 +6,16 @@
  * needs explaining lives in the "how it works" section (copy.info).
  */
 
+// The canonical meme couplet — shared by the connect hero and the connected
+// home screen so the two screens can never drift apart.
+const CAPTION_TOP = 'yo dawg, i heard\nyou like launchers';
+const CAPTION_BOTTOM =
+  'so i put a launcher launcher\nin your launcher so you can\nlaunch a launcher while you launch';
+
 export const copy = {
   connect: {
-    captionTop: 'yo dawg, i heard\nyou like launchers',
-    captionBottom:
-      'so i put a launcher launcher\nin your launcher so you can\nlaunch a launcher while you launch',
+    captionTop: CAPTION_TOP,
+    captionBottom: CAPTION_BOTTOM,
     button: 'plug in, dawg →',
     connecting: 'shaking hands…',
   },
@@ -26,8 +31,9 @@ export const copy = {
   },
 
   home: {
-    // Mascot hero (the connected landing screen).
-    caption: 'launch a launcher\nwhile you launch',
+    // Mascot hero (the connected landing screen) — same couplet as connect.
+    captionTop: CAPTION_TOP,
+    captionBottom: CAPTION_BOTTOM,
     mineOption: (n?: number) => (n === undefined ? 'your launchers' : `your launchers (${n})`),
     othersOption: (n?: number) =>
       n === undefined ? "everyone else's launchers" : `everyone else's launchers (${n})`,
@@ -39,6 +45,7 @@ export const copy = {
     mineEmpty: 'none yet. the button below fixes that.',
     loading: 'loading…',
     share: (url: string) => `share: ${url}`,
+    pill: '🔒 pairs everything w/ $HOODIE',
     button: '+ make a launcher',
     verifyLink: 'verify a launch →',
     infoLink: 'how it works →',

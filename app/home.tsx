@@ -83,38 +83,47 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
 
       {active === 'home' && (
         <>
-          <div className="center" style={{ flex: 1 }}>
-            <Image
-              src="/brand/yo-dawg-transparent.png"
-              alt="Yo Dawg mascot"
-              width={200}
-              height={200}
-              className="mascot"
-              style={{ width: 190, height: 'auto' }}
-              priority
-            />
-            <h1 className="meme-caption" style={{ fontSize: 22, whiteSpace: 'pre-line' }}>
-              {copy.home.caption}
-            </h1>
-          </div>
-
-          <button className="btn alt" style={{ marginBottom: 8 }} onClick={() => setScreen('mine')}>
-            {copy.home.mineOption(counts?.mine)}
-          </button>
-          <button className="btn alt" onClick={() => setScreen('others')}>
-            {copy.home.othersOption(counts?.others)}
-          </button>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 12 }}>
-            <button className="linkish" onClick={() => setScreen('info')}>
-              {copy.home.infoLink}
-            </button>
-            <button className="linkish" onClick={() => setScreen('verify')}>
-              {copy.home.verifyLink}
-            </button>
-          </div>
-          <button className="btn" style={{ marginTop: 12 }} onClick={() => setScreen('create')}>
+          <button className="btn" style={{ marginTop: 10 }} onClick={() => setScreen('create')}>
             {copy.home.button}
           </button>
+
+          <div className="home-hero">
+            <h1 className="meme-caption home-caption">{copy.home.captionTop}</h1>
+            <div className="home-mascot-wrap">
+              <Image
+                src="/brand/yo-dawg-transparent.png"
+                alt="Yo Dawg mascot"
+                width={1024}
+                height={746}
+                className="home-mascot"
+                priority
+              />
+              <p className="meme-caption sm home-caption-sub">{copy.home.captionBottom}</p>
+            </div>
+          </div>
+
+          <div className="home-footer">
+            <div className="home-footer-inner">
+              <div className="home-footer-links">
+                <button className="linkish light" onClick={() => setScreen('info')}>
+                  {copy.home.infoLink}
+                </button>
+                <button className="linkish light" onClick={() => setScreen('verify')}>
+                  {copy.home.verifyLink}
+                </button>
+              </div>
+              <button
+                className="btn alt round"
+                style={{ marginBottom: 12 }}
+                onClick={() => setScreen('mine')}
+              >
+                {copy.home.mineOption(counts?.mine)}
+              </button>
+              <button className="btn alt round" onClick={() => setScreen('others')}>
+                {copy.home.othersOption(counts?.others)}
+              </button>
+            </div>
+          </div>
         </>
       )}
 

@@ -32,6 +32,9 @@ body {
   font-size: 14px;
   line-height: 1.45;
   color: var(--ink);
+  /* The home footer bleeds to the viewport edge via 50vw negative margins;
+   * clip the sliver of overflow that trick creates when a scrollbar shows. */
+  overflow-x: hidden;
 }
 
 main {
@@ -60,7 +63,7 @@ main {
   font-family: var(--font-impact);
   text-transform: uppercase;
   letter-spacing: 1px;
-  line-height: 1.05;
+  line-height: 1.02;
   text-align: center;
   color: #fff;
   -webkit-text-stroke: 2px #000;
@@ -82,11 +85,12 @@ main {
   margin: 0 6px 8px;
   background: rgba(255, 255, 255, 0.78);
   border-radius: 8px;
-  padding: 3px 6px;
+  padding: 3px 5px;
   white-space: pre-line;
 }
 
 .logo {
+  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -173,6 +177,12 @@ a {
   margin-top: auto;
 }
 
+/* White pill variant (home footer): fully-rounded ends, black Impact text. */
+.btn.round {
+  border-radius: 999px;
+  padding: 15px 13px;
+}
+
 /* --------------------------------------------------------------------------
  * Cards, pills, fields
  * ------------------------------------------------------------------------ */
@@ -213,7 +223,7 @@ a {
   color: var(--neon-ink);
   border: 2px solid var(--ink);
   border-radius: 20px;
-  padding: 5px 10px;
+  padding: 6px 10px;
   font-size: 11px;
   font-weight: bold;
   box-shadow: 2px 2px 0 var(--ink);
@@ -302,10 +312,10 @@ a {
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.25),
+    rgba(0, 0, 0, 0.12),
     rgba(0, 0, 0, 0) 30%,
-    rgba(0, 0, 0, 0) 55%,
-    rgba(0, 0, 0, 0.35)
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0.3)
   );
 }
 
@@ -418,7 +428,7 @@ a {
   letter-spacing: 1px;
   font-size: 20px;
   color: var(--purple);
-  -webkit-text-stroke: 1px #000;
+  -webkit-text-stroke: 1.5px #000;
   text-align: center;
   margin: 0 0 6px;
 }
@@ -460,6 +470,97 @@ a {
   color: #333;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* Link variant for dark surfaces (the black home footer). */
+.linkish.light {
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+/* --------------------------------------------------------------------------
+ * Connected home screen: giant mascot hero + full-bleed black footer
+ * ------------------------------------------------------------------------ */
+
+/* Hero fills the space between the make-a-launcher button and the footer.
+ * The mascot wrap is the flexible piece: it grows toward the image's natural
+ * height (max-height) and, on short viewports, sits at its flex-basis floor
+ * with the image bottom-cropped by overflow:hidden. Free space only opens
+ * above the caption (flex-end) once the mascot is already at full size. */
+.home-hero {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  text-align: center;
+}
+
+.home-caption {
+  flex: 0 0 auto;
+  font-size: clamp(28px, 8.5vw, 38px);
+  position: relative;
+  z-index: 1;
+  margin: 14px 0 0;
+}
+
+/* Full-bleed mascot: negative side margins cancel main's 15px padding, so
+ * the wrap is min(100vw, 480px) wide — shoulders touch the edges like the
+ * mockup. The image is 1024x746 (face in the top ~66%); max-height is its
+ * natural rendered height, so the wrap never grows past the artwork.
+ * min-height is the crop floor: at 240px the chin (~66% of the ~284px
+ * natural height at 390px viewports) is still well above the cropping edge,
+ * so only the lower body ever disappears behind the footer. */
+.home-mascot-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 240px;
+  max-height: calc(min(100vw, 480px) * 746 / 1024);
+  width: calc(100% + 30px);
+  margin: -20px -15px 0; /* hood tip tucks behind the big caption */
+  overflow: hidden;
+}
+
+.home-mascot {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, 0.35));
+}
+
+/* Pinned to the bottom of the visible mascot area — across the chest when
+ * uncropped, never higher than the chin at the 240px crop floor. */
+.home-caption-sub {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  z-index: 1;
+  font-size: 17px;
+  margin: 0;
+}
+
+/* Full-bleed black band: negative margins escape main's side padding and
+ * swallow its bottom padding, stretching edge-to-edge at any viewport. */
+.home-footer {
+  background: var(--ink);
+  margin: 0 calc(50% - 50vw) -72px;
+  padding: 18px 0 30px;
+  position: relative;
+  z-index: 2;
+}
+
+.home-footer-inner {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+.home-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 34px;
+  margin-bottom: 16px;
 }
 
 details.advanced summary {

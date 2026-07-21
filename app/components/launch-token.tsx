@@ -181,10 +181,10 @@ export function LaunchToken({
     return (
       <div className="center" style={{ flex: 1 }}>
         <div className="spin" aria-hidden />
-        <p className="meme-caption sm" style={{ fontSize: 15, marginTop: 16 }} aria-live="polite">
+        <p className="meme-caption" style={{ fontSize: 20 }} aria-live="polite">
           {copy.launching.lines[lineIdx]}
         </p>
-        <p className="meme-sub" style={{ marginTop: 8 }}>
+        <p className="muted" style={{ marginTop: 8 }}>
           {txHash ? copy.launching.status : 'waiting for your signature…'}
         </p>
       </div>
@@ -194,74 +194,80 @@ export function LaunchToken({
   /* ---------- success (screen 7) ---------- */
   if (phase === 'success' && proof) {
     return (
-      <div className="center" style={{ flex: 1 }}>
-        <Image
-          src="/brand/yo-dawg-transparent.png"
-          alt="Yo Dawg mascot"
-          width={140}
-          height={140}
-          className="mascot"
-        />
-        <h1 className="meme-caption" style={{ fontSize: 22, whiteSpace: 'pre-line' }}>
-          {copy.success.title}
-        </h1>
-        {proof.isHoodie ? (
-          <div className="stamp">{copy.success.stamp}</div>
-        ) : (
-          <p className="error-code">{copy.verify.failed}</p>
-        )}
-        <div className="card" style={{ width: '100%', textAlign: 'left', marginTop: 12 }}>
-          <div className="hint">{copy.success.tokenLabel}</div>
-          <div className="mono">
-            <a href={`${EXPLORER_URL}/token/${proof.token}`} target="_blank" rel="noreferrer">
-              {proof.token}
-            </a>
-          </div>
-          <div className="hint" style={{ marginTop: 8 }}>
-            {copy.success.pairedLabel}
-          </div>
-          <div>{proof.isHoodie ? copy.success.pairedValue : <span className="mono">{proof.pairedToken}</span>}</div>
-          {txHash && (
-            <div style={{ marginTop: 8 }}>
-              <a className="mono" href={`${EXPLORER_URL}/tx/${txHash}`} target="_blank" rel="noreferrer">
-                view transaction
-              </a>
-            </div>
+      <>
+        <div className="center" style={{ flex: 1 }}>
+          <Image
+            src="/brand/yo-dawg-transparent.png"
+            alt="Yo Dawg mascot"
+            width={140}
+            height={140}
+            className="mascot"
+          />
+          <h1 className="meme-caption" style={{ fontSize: 22, whiteSpace: 'pre-line' }}>
+            {copy.success.title}
+          </h1>
+          {proof.isHoodie ? (
+            <div className="stamp">{copy.success.stamp}</div>
+          ) : (
+            <p className="error-code">{copy.verify.failed}</p>
           )}
+          <div className="card" style={{ width: '100%', textAlign: 'left', marginTop: 14 }}>
+            <div className="muted">{copy.success.tokenLabel}</div>
+            <b style={{ fontSize: 13 }} className="mono">
+              <a href={`${EXPLORER_URL}/token/${proof.token}`} target="_blank" rel="noreferrer">
+                {proof.token}
+              </a>
+            </b>
+            <div className="muted" style={{ marginTop: 6 }}>
+              {copy.success.pairedLabel}
+            </div>
+            <b style={{ fontSize: 13 }}>
+              {proof.isHoodie ? copy.success.pairedValue : <span className="mono">{proof.pairedToken}</span>}
+            </b>
+            {txHash && (
+              <div style={{ marginTop: 8 }}>
+                <a className="mono" href={`${EXPLORER_URL}/tx/${txHash}`} target="_blank" rel="noreferrer">
+                  view transaction
+                </a>
+              </div>
+            )}
+          </div>
         </div>
-        <button className="btn neon" style={{ width: '100%', marginTop: 12 }} onClick={share}>
+        <button className="btn neon" onClick={share}>
           {copy.success.button}
         </button>
-        <button className="linkish" style={{ marginTop: 10 }} onClick={resetForAnother}>
+        <button className="linkish" style={{ margin: '10px auto 0' }} onClick={resetForAnother}>
           launch another one
         </button>
-        <button className="linkish" style={{ marginTop: 4 }} onClick={onDone}>
+        <button className="linkish" style={{ margin: '4px auto 0' }} onClick={onDone}>
           back to the launchers
         </button>
-      </div>
+      </>
     );
   }
 
   /* ---------- error (screen 8) ---------- */
   if (phase === 'error') {
     return (
-      <div className="center" style={{ flex: 1 }}>
-        <Image
-          src="/brand/yo-dawg-transparent.png"
-          alt="Yo Dawg mascot"
-          width={140}
-          height={140}
-          className="mascot"
-        />
-        <h1 className="meme-caption" style={{ fontSize: 22 }}>
-          {isPairingError ? copy.error.title : copy.error.genericTitle}
-        </h1>
-        <p className="meme-sub">{isPairingError ? copy.error.pairingBody : copy.error.genericBody}</p>
-        <p className="error-code">{isPairingError ? copy.error.pairingCode : `error: ${errorDetail}`}</p>
-        <button className="btn" style={{ width: '100%', marginTop: 12 }} onClick={() => setPhase('form')}>
+      <>
+        <div className="center" style={{ flex: 1 }}>
+          <Image
+            src="/brand/yo-dawg-transparent.png"
+            alt="Yo Dawg mascot"
+            width={140}
+            height={140}
+            className="mascot"
+          />
+          <h1 className="meme-caption" style={{ fontSize: 22 }}>
+            {isPairingError ? copy.error.title : copy.error.genericTitle}
+          </h1>
+          <p className="meme-sub">{isPairingError ? copy.error.pairingBody : copy.error.genericBody}</p>
+          <p className="error-code">{isPairingError ? copy.error.pairingCode : `error: ${errorDetail}`}</p>
+        </div>
+        <button className="btn" onClick={() => setPhase('form')}>
           {isPairingError ? copy.error.button : copy.error.genericButton}
         </button>
-      </div>
+      </>
     );
   }
 
@@ -328,7 +334,7 @@ export function LaunchToken({
       {formError && <p className="error-code">error: {formError}</p>}
 
       <button
-        className="btn neon bottom"
+        className="btn bottom"
         onClick={() => setPhase('confirm')}
         disabled={!name || !symbol || !address}
       >
@@ -339,13 +345,15 @@ export function LaunchToken({
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal">
             <div className="modal-title">{copy.confirm.title}</div>
-            <p>{copy.confirm.body(`$${symbol}`, mcapDisplay)}</p>
-            <div className="warnbar">{copy.confirm.warn}</div>
-            <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn alt" onClick={() => setPhase('form')}>
+            <p style={{ fontSize: 12, textAlign: 'center', margin: '6px 0 10px' }}>
+              {copy.confirm.body(`$${symbol}`, mcapDisplay)}
+            </p>
+            <div className="warnbar" style={{ margin: '0 0 10px' }}>{copy.confirm.warn}</div>
+            <div className="row">
+              <button className="btn alt sm" onClick={() => setPhase('form')}>
                 {copy.confirm.cancel}
               </button>
-              <button className="btn neon" onClick={launch}>
+              <button className="btn neon sm" onClick={launch}>
                 {copy.confirm.confirm}
               </button>
             </div>
