@@ -3,3 +3,13 @@ node_modules/
 *.local
 dist/
 .DS_Store
+
+# Next.js
+.next/
+next-env.d.ts
+
+# Foundry artifacts (contracts/lib/forge-std is vendored and committed)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+tsconfig.tsbuildinfo

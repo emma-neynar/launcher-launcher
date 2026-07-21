@@ -1,86 +1,108 @@
 # Launcher Launcher
 
-A **token-launcher-launcher** on **Robinhood Chain**, built on top of the deployed Clanker v4 protocol via the published [`clanker-sdk`](https://www.npmjs.com/package/clanker-sdk) npm package.
+A **token-launcher-launcher** on **Robinhood Chain** (chain id 4663), built on the deployed Clanker v4 protocol. The joke, and the rule: **every token launched through any Launcher created here is force-paired with $HOODIE** (`0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3`, a Bankr token). No creator, launcher owner, or end user can change it — the rule is enforced **on-chain**.
 
-The joke, and the rule: **every token launched through any Launcher created here is force-paired with $HOODIE** (`0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3`, a Bankr token). No creator, launcher owner, or end user can change it.
+Three pieces, one repo:
 
-## The two layers
+| Piece | Where | What it does |
+|---|---|---|
+| On-chain wrapper | `contracts/` (standalone Foundry project) | `LauncherLauncher` + `Launcher` contracts; the immutable $HOODIE rule lives here |
+| Farcaster Mini App | `app/` (Next.js) | Users create launchers and launch tokens with **their own wallets** |
+| CLI (original prototype) | `src/` | SDK-direct path; also the admin/deploy tooling with the gated `--live` key path |
 
-1. **Launcher** (`launch` command) — deploys a token through the already-deployed Clanker v4 factory on Robinhood Chain (`0xD3f2cC1731b7Fd17f28798835C2E02f0a1839A94`). The pool's paired/quote token is locked to $HOODIE. The launcher's fee recipient automatically gets a share of LP fee rewards (default 20%), the token creator gets the rest.
-2. **Launcher Launcher** (`create-launcher` command) — spins up a new Launcher (name, fee recipient, fee share, description) as easily as launching a token. Every Launcher it creates inherits the immutable $HOODIE rule. Created launchers and their launches live in a simple JSON registry (`registry/launchers.json`).
+## The two on-chain layers
 
-## The immutable $HOODIE rule
+**1. `LauncherLauncher`** (`contracts/src/LauncherLauncher.sol`) — deploys one canonical `Launcher` implementation in its constructor, then `createLauncher(name, feeRecipient, lpRewardBps)` hands out EIP-1167 minimal-proxy clones and keeps an on-chain registry (`allLaunchers()`, `launcherCount()`, `LauncherCreated` event). Creating a launcher is as easy as launching a token.
 
-Enforced in depth, in `src/hoodie-lock.ts`:
+**2. `Launcher`** (`contracts/src/Launcher.sol`) — `launch(LaunchParams)` builds the Clanker v4 `deployToken()` call (selector `0xdf40224a`) and calls the **already-deployed** factory at `0xD3f2cC1731b7Fd17f28798835C2E02f0a1839A94`. The wrapper never deploys, upgrades, or administers any Clanker contract — it is strictly a caller. The launcher's `feeRecipient` gets `lpRewardBps` (max 50%) of LP fee rewards; the token creator gets the rest.
 
-1. `HOODIE_ADDRESS` is a frozen constant in `src/constants.ts`. Nothing in this repo reads a paired token from user input, env vars, config files, or the network.
-2. `buildLockedTokenConfig()` is the only place a deploy config is constructed; it writes `pool.pairedToken` from the constant. If a caller passes a `--paired-token` that isn't $HOODIE, it throws `HoodiePairingViolation` before anything touches the network.
-3. After the SDK encodes the raw `deployToken()` calldata, `assertHoodieInCalldata()` re-verifies the encoded `poolConfig.pairedToken` — so even a bug or tampered dependency between config and calldata gets caught.
-4. Registry entries store `pairedToken` for display only; a tampered registry entry is refused at load time.
-5. `verify --tx <hash>` decodes an on-chain deploy transaction's calldata against the factory ABI and proves the pairing after the fact.
+### Where the immutable rule is enforced
 
-No custom contracts were needed: the pairing is a parameter of Clanker's own `deployToken()` call, so locking the parameter at the only choke point (plus calldata verification) gives the guarantee without forking or redeploying anything.
+- `Launcher.HOODIE` is a **compile-time `constant`** — not storage, not an immutable set by a constructor arg, no setter, no initializer parameter.
+- `Launcher.LaunchParams` **has no pairedToken field**: a direct caller of `launch()` cannot even express a different pair (reject-by-construction).
+- Every clone delegatecalls the same implementation bytecode, so every launcher created by `LauncherLauncher` inherits the rule with no per-launcher escape hatch.
+- Proof lives in the tests: `test_hoodieIsConstant_expectedAddress`, `test_everyCloneInheritsHoodie`, `test_noPairSetterExists`, `test_implementationIsBricked`, `test_cloneInitializesExactlyOnce` (`contracts/test/Immutability.t.sol`, no fork needed) and `test_fullFlow_tokenPairedWithHoodie`, `testFuzz_launch_alwaysPairsHoodie`, `test_customTick_stillHoodie` (`contracts/test/LauncherFork.t.sol`, run against a fork of the live factory — they decode the factory's own `TokenCreated` event and assert `pairedToken == HOODIE`).
 
-Pairing with a non-whitelisted token is explicitly allowed by the protocol: the official [supported quote tokens](https://clanker.world/docs/references/supported-quote-tokens) list only applies to the @clanker bot and API deployments — "users may permissionlessly interact with the Clanker token factory to deploy tokens paired with arbitrary quote tokens and that start at arbitrary market caps." This repo takes that permissionless factory path via the SDK, which is why the $HOODIE pairing simulates successfully.
+## Fork testing (Robinhood has no testnet)
 
-One tuning note: the pool starts at the SDK's default initial tick (`-230400`), which prices the starting market cap at roughly 10 **$HOODIE** (the per-quote-token ticks in the docs table show how other pairs calibrate this). For a real launch you'd pick a tick based on $HOODIE's market price; for the prototype the default is fine.
-
-## Safety posture
-
-- Clanker is consumed **only** as the versioned npm dependency `clanker-sdk@^4.2.18`. Nothing in any Clanker repo, contract, indexer, database, bot, or frontend is touched.
-- The only contract ever called is the already-deployed Clanker v4 factory on Robinhood Chain, through the SDK's normal public methods.
-- **Robinhood Chain has no testnet in the SDK** (chain id 4663 is the only Robinhood entry, `testnet: false`), so the default path is a full **dry-run**: the SDK encodes real calldata, we verify it, and simulate the deploy via `eth_call` against the live RPC — nothing is ever broadcast.
-- Mainnet execution requires the explicit `--live` flag **and** typing `LAUNCH` at an interactive confirmation, and a `PRIVATE_KEY` in `.env` (gitignored; use a fresh dev wallet with minimal funds).
-
-## Quickstart
+Robinhood Chain has no testnet in the Clanker SDK (4663 is mainnet-only), so everything runs against a **local Anvil fork** by default. Requires [Foundry](https://book.getfoundry.sh/getting-started/installation).
 
 ```bash
+# Foundry test suite (unit + fork tests; fork tests hit the live RPC read-only)
+npm run test:contracts
+
+# One command, full proof: starts an Anvil fork, deploys LauncherLauncher,
+# creates a launcher, launches a token, and decodes the factory's TokenCreated
+# event from the fork to prove pairedToken == $HOODIE. Nothing touches mainnet.
+npm run fork:demo
+```
+
+## The Mini App
+
+Next.js app in `app/`, using `@farcaster/miniapp-sdk` (0.3.x) + `@farcaster/miniapp-wagmi-connector` (2.x) + wagmi 2.x. `sdk.actions.ready()` is called on mount (`app/providers.tsx`).
+
+- **Flows:** create a launcher → browse the on-chain registry → launch a token through a selected launcher → post-launch proof panel + standalone "Verify" tab (paste any tx hash; it decodes the factory's `TokenCreated` event client-side).
+- **Wallet:** users sign with their own wallet via the Mini App Ethereum provider (`farcasterMiniApp()` connector) or an injected wallet in a plain browser. Target chain is 4663 with a switch/add-chain prompt. **No server key anywhere in the app path.**
+- **The pairing is not an editable field anywhere** — it renders as a locked banner (`app/components/locked-pair.tsx`).
+- **Market cap → tick:** the launch form takes a target starting market cap denominated in $HOODIE and computes `tick = floor(log(mcap / 100e9) / log(1.0001) / 200) * 200` (both tokens are 18 decimals, so no decimal adjustment; USD denomination would need a $HOODIE price feed — deliberately out of scope). A manual tick override exists behind a warning; the SDK default `-230400` ≈ 10 $HOODIE.
+
+### Run it against the fork
+
+```bash
+cp .env.example .env
 npm install
-cp .env.example .env   # PRIVATE_KEY only needed for --live
 
-# Layer 2: create a Launcher
-npm run ll -- create-launcher --name "Hoodie Season" \
-  --fee-recipient 0xYourDevWallet --description "all pairs lead to HOODIE"
+# 1. fork + deploy the wrapper locally
+anvil --fork-url https://rpc.mainnet.chain.robinhood.com &
+cd contracts && forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 \
+  --broadcast --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 && cd ..
 
-# Layer 1: launch a token through it (DRY RUN — default)
-npm run ll -- launch --launcher hoodie-season \
-  --name "My Token" --symbol MTK --creator 0xYourDevWallet
+# 2. put the printed LauncherLauncher address into .env:
+#    NEXT_PUBLIC_LAUNCHER_LAUNCHER_ADDRESS=0x...
+#    NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545
 
-# See registered launchers + their launches
-npm run ll -- list
-
-# Actually deploy (mainnet; gated behind flag + typed confirmation)
-npm run ll -- launch --launcher hoodie-season \
-  --name "My Token" --symbol MTK --creator 0xYourDevWallet --live
-
-# Prove any deploy tx was $HOODIE-paired from its on-chain calldata
-npm run ll -- verify --tx 0x<deploy tx hash>
+# 3. run the app
+npm run dev   # http://localhost:3000
 ```
 
-A dry run prints the encoded factory call, the verified $HOODIE paired token, the reward split, the CREATE2-predicted token address, and the result of the `eth_call` simulation. Trying to sneak a different pair fails loudly:
+### Manifest + embed
 
+- `public/.well-known/farcaster.json` — the Mini App manifest (`miniapp.version/name/homeUrl/iconUrl` + store metadata). `requiredChains` is intentionally omitted: Farcaster's chain list doesn't include `eip155:4663`, so the app handles chain add/switch itself.
+- The root layout and the shareable route `app/l/[launcherAddress]` emit the `fc:miniapp` (+ legacy `fc:frame`) meta tag, so casting a launcher URL renders a "Launch with $HOODIE" card.
+
+## CLI (SDK-direct path, kept from v1)
+
+```bash
+npm run ll -- create-launcher --name "Hoodie Season" --fee-recipient 0x...   # JSON registry
+npm run ll -- launch --launcher hoodie-season --name "My Token" --symbol MTK --creator 0x...  # dry-run default
+npm run ll -- launch ... --live   # mainnet; requires PRIVATE_KEY + typing LAUNCH
+npm run ll -- verify --tx 0x...  # decode any factory deploy tx's pairedToken
 ```
-$ npm run ll -- launch ... --paired-token 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73
-Error: Paired token is locked to $HOODIE (0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3)
-and cannot be overridden. Rejected attempt to pair with 0x0Bd7...AD73.
-```
 
-## Clanker SDK usage map
+The CLI enforces the same rule in TypeScript (`src/hoodie-lock.ts`): hardcoded constant, override rejection, and calldata re-verification before simulate/send.
 
-| SDK call | Type | Purpose here |
-|---|---|---|
-| `robinhood` (chain export) | read-only constant | viem chain config for Robinhood Chain (id 4663) |
-| `POOL_POSITIONS.Standard` | read-only constant | default LP position shape |
-| `clankerConfigFor(4663, 'clanker_v4')` | read-only lookup | factory address + ABI for `verify` |
-| `new Clanker({ publicClient, wallet? })` (from `clanker-sdk/v4`) | client setup | — |
-| `clanker.getDeployTransaction(token)` | pure encoding (no network) | build + inspect raw `deployToken()` args |
-| `clanker.deploySimulate(token, account)` | read-only `eth_call` | dry-run against live factory, never broadcasts |
-| `clanker.deploy(token)` | **write (mainnet tx)** | only behind `--live` + typed confirmation |
+## Read-only vs write calls
 
-The paired token is set via the `ClankerTokenV4` config field `pool.pairedToken` (v4; the v3-era name was `pool.quoteToken`), which the SDK encodes into the factory's `poolConfig.pairedToken` calldata field.
+| Call | Type |
+|---|---|
+| clanker-sdk: `robinhood`, `POOL_POSITIONS`, `clankerConfigFor`, `getDeployTransaction` | read-only / pure encoding |
+| clanker-sdk: `deploySimulate` | read-only `eth_call` |
+| clanker-sdk: `deploy` (CLI only) | **write** — gated behind `--live` + typed `LAUNCH` |
+| Wrapper: `allLaunchers`, `launcherCount`, `HOODIE`, `tokens`, event decoding | read-only |
+| Wrapper: `createLauncher`, `launch` | **write** — signed by the end user's own wallet (fork or mainnet) |
+| `scripts/deploy-live.sh` (deploys the wrapper itself) | **write** — gated behind typed `DEPLOY` + dev-wallet key |
+| Clanker factory `deployToken` | **write**, but only ever invoked *through* the wrapper/SDK paths above; the factory itself is never deployed/modified/administered |
 
-## Bounty mapping
+## Safety posture (unchanged)
 
-- Built on Clanker on Robinhood Chain, using only the public, published SDK against the already-deployed factory.
-- $HOODIE pairing is structural, verified in calldata pre-send and provable on-chain post-send.
-- "Launcher-launcher": creating a launcher is one command, launching through it is one more, and the rule survives both layers.
+- Clanker consumed only as the versioned npm dependency `clanker-sdk@^4.2.18`; zero edits to `node_modules` or any Clanker repo; no interaction with Clanker core contracts except calling the public deployed factory; no writes to any Clanker production service.
+- Secrets live in the gitignored `.env` (`.env.example` is committed); a fresh dev wallet with minimal funds for anything live; the mini app never sees a server key.
+- All default paths are local/simulated (Anvil fork, `eth_call`). Mainnet actions are single, separate, explicitly-gated scripts with typed confirmations — never automatic.
+- Docs note: pairing with arbitrary quote tokens is [explicitly permissionless at the factory](https://clanker.world/docs/references/supported-quote-tokens); the whitelist only constrains the @clanker bot/API.
+
+## Go-live checklist (the remaining human steps)
+
+1. **Deploy the wrapper to mainnet:** fund a fresh dev wallet with a little ETH on Robinhood Chain, put its key in `.env` as `PRIVATE_KEY`, then `npm run deploy:live` (asks you to type `DEPLOY`). Put the printed address in `.env` as `NEXT_PUBLIC_LAUNCHER_LAUNCHER_ADDRESS` and set `NEXT_PUBLIC_RPC_URL=https://rpc.mainnet.chain.robinhood.com`.
+2. **Host the app** on a stable domain (the domain is the Mini App's permanent identity). Set `NEXT_PUBLIC_APP_URL=https://yourdomain`. Add a real 1024×1024 PNG at `public/icon.png` and a 3:2 (≥600×400) `public/embed-image.png`, and fill the real URLs into `public/.well-known/farcaster.json`.
+3. **Sign the manifest:** open the Warpcast Mini App Manifest Tool (`https://farcaster.xyz/~/developers/mini-apps/manifest`), enter your domain, sign with the **Farcaster custody key of the owning account**, and replace the `_TODO_accountAssociation` key in `public/.well-known/farcaster.json` with the generated `accountAssociation` object. This cannot be faked or automated — only the account owner can produce it.
+4. Cast the app URL (or any `/l/<launcher>` URL) — it renders as a launchable Mini App card.
