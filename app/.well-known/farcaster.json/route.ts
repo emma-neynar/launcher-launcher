@@ -37,13 +37,16 @@ export async function GET() {
       iconUrl: `${appUrl}/icon.png`,
       splashImageUrl: `${appUrl}/splash.png`,
       splashBackgroundColor: '#8a63d2',
-      subtitle: 'put a launcher in your launcher',
+      // Farcaster manifest constraints: subtitle max 30 chars, description
+      // max 170 chars, and no special characters (@#$%^&*+=/\|~<>) in either
+      // description — so "HOODIE" appears here without its "$".
+      subtitle: 'put a launcher in a launcher',
       description:
-        'yo dawg, i heard you like launchers. spin up your own token launcher on Robinhood Chain — every token it launches pairs with $HOODIE, locked at the contract level. house rule. only rule.',
+        'yo dawg, i heard you like launchers. spin up your own token launcher on Robinhood Chain. every token it launches pairs with HOODIE. house rule. only rule.',
       primaryCategory: 'finance',
       tags: ['clanker', 'robinhood', 'hoodie', 'tokens', 'launcher'],
       ogTitle: 'YO DAWG — launcher launcher',
-      ogDescription: 'put a launcher launcher in your launcher. every pair is $HOODIE, proven on-chain.',
+      ogDescription: 'put a launcher launcher in your launcher. every pair is HOODIE, proven on-chain.',
       ogImageUrl: `${appUrl}/embed-image.png`,
     },
   });
