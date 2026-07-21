@@ -1,0 +1,22 @@
+{
+  "name": "launcher-launcher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A token-launcher-launcher on Robinhood Chain. Every token is force-paired with $HOODIE. Built on the published clanker-sdk (consumed read-only as an npm dependency).",
+  "type": "module",
+  "scripts": {
+    "ll": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "clanker-sdk": "^4.2.18",
+    "commander": "^14.0.0",
+    "dotenv": "^17.2.0",
+    "viem": "^2.38.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
