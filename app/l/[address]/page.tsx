@@ -17,13 +17,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     version: '1',
     imageUrl: `${APP_URL}/embed-image.png`,
     button: {
-      title: 'Launch with $HOODIE',
-      action: { type: 'launch_miniapp', name: 'Launcher Launcher', url },
+      title: 'launch through this one, dawg',
+      action: {
+        type: 'launch_miniapp',
+        name: 'YO DAWG',
+        url,
+        splashImageUrl: `${APP_URL}/splash.png`,
+        splashBackgroundColor: '#8a63d2',
+      },
     },
   };
   return {
-    title: 'Launcher Launcher',
-    description: 'Launch a token through this launcher — paired with $HOODIE, guaranteed.',
+    title: 'YO DAWG — launcher launcher',
+    description:
+      'launch a token through this launcher — paired with $HOODIE, locked at the contract level.',
     other: {
       'fc:miniapp': JSON.stringify(embed),
       'fc:frame': JSON.stringify({

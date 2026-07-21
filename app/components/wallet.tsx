@@ -1,9 +1,11 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
-import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
+import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
 import { CHAIN_ID } from '@/src/hoodie';
-import { robinhoodChain } from '../lib/wagmi';
+import { copy } from '../lib/copy';
+import { APP_URL, robinhoodChain } from '../lib/wagmi';
 
 /**
  * KNOWN LIMITATION (verified against @farcaster/miniapp-wagmi-connector source
@@ -15,7 +17,7 @@ import { robinhoodChain } from '../lib/wagmi';
  * Rabby, …) work: wagmi falls back to wallet_addEthereumChain automatically.
  * We detect the actual host support at runtime via sdk.getChains().
  */
-function useFarcasterChainSupport(connectorId: string | undefined) {
+export function useFarcasterChainSupport(connectorId: string | undefined) {
   // null = unknown/not applicable, false = host wallet cannot do 4663.
   const [supported, setSupported] = useState<boolean | null>(null);
 
@@ -44,84 +46,131 @@ function useFarcasterChainSupport(connectorId: string | undefined) {
   return supported;
 }
 
-export function WalletBar() {
-  const { isConnected, address, connector } = useAccount();
-  const chainId = useChainId();
+/** Screen 1 — full-bleed hero with the canonical caption and connect buttons. */
+export function ConnectHero() {
   const { connect, connectors, isPending } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { switchChain, isPending: switching, error: switchError } = useSwitchChain();
-  const farcasterSupports4663 = useFarcasterChainSupport(connector?.id);
-  const [inMiniApp, setInMiniApp] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { sdk } = await import('@farcaster/miniapp-sdk');
-        setInMiniApp(await sdk.isInMiniApp());
-      } catch {
-        /* not in a mini app host */
-      }
-    })();
-  }, []);
-
-  if (!isConnected) {
-    return (
-      <div className="card">
-        <h2>Wallet</h2>
-        <p className="muted">
-          Connect your own wallet — you sign every transaction. This app never holds a key.
+  return (
+    <div className="hero">
+      <div className="hero-content">
+        <h1 className="meme-caption" style={{ fontSize: 26 }}>
+          {copy.connect.captionTop}
+        </h1>
+        <div style={{ flex: 1 }} />
+        <p className="meme-caption sm" style={{ fontSize: 16, marginBottom: 8 }}>
+          {copy.connect.captionBottom}
         </p>
-        {inMiniApp && (
-          <p className="warn">
-            Heads up: the Farcaster in-app wallet cannot use Robinhood Chain (it cannot add custom
-            chains). To launch tokens, open this app in your browser and connect an external wallet
-            (MetaMask, Rabby, WalletConnect, …).
-          </p>
-        )}
+        <p className="meme-sub" style={{ marginBottom: 10 }}>
+          {copy.connect.sub}
+        </p>
         {connectors.map((c) => (
-          <button key={c.uid} onClick={() => connect({ connector: c })} disabled={isPending} style={{ marginRight: 8 }}>
-            Connect {c.name}
+          <button
+            key={c.uid}
+            className="btn"
+            style={{ marginBottom: 8 }}
+            onClick={() => connect({ connector: c })}
+            disabled={isPending}
+          >
+            {isPending
+              ? copy.connect.connecting
+              : connectors.length > 1
+                ? `plug in w/ ${c.name.toLowerCase()} →`
+                : copy.connect.button}
           </button>
         ))}
       </div>
-    );
+    </div>
+  );
+}
+
+/**
+ * Screen 2 — the add-chain fallback. Only rendered when the connected wallet
+ * is on the wrong chain. Runtime-detects the Farcaster host wallet, which
+ * genuinely cannot reach 4663, and switches to the honest "open in browser"
+ * variant instead of dead-ending on a broken switch prompt.
+ */
+export function ChainGate({ onToast }: { onToast: (msg: string) => void }) {
+  const { connector } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { switchChain, isPending, error } = useSwitchChain();
+  const farcasterSupports4663 = useFarcasterChainSupport(connector?.id);
+  const blocked = connector?.id === 'farcaster' && farcasterSupports4663 === false;
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(APP_URL);
+      onToast(copy.toasts.copied);
+    } catch {
+      /* clipboard unavailable */
+    }
   }
 
-  const wrongChain = chainId !== CHAIN_ID;
-  const farcasterBlocked = connector?.id === 'farcaster' && farcasterSupports4663 === false;
+  return (
+    <main>
+      <div className="logo">
+        <b>YO DAWG</b>
+      </div>
+      <div className="center">
+        <Image
+          src="/brand/yo-dawg-transparent.png"
+          alt="Yo Dawg mascot"
+          width={160}
+          height={160}
+          className="mascot"
+        />
+        <h1 className="meme-caption" style={{ fontSize: 22 }}>
+          {copy.addChain.title}
+        </h1>
+        <p className="meme-sub">{blocked ? copy.addChain.blockedBody : copy.addChain.body}</p>
+        {!blocked && <div className="warnbar">{copy.addChain.warn}</div>}
+        {!blocked && error && (
+          <p className="error-code">chain switch failed: {error.message.split('\n')[0]}</p>
+        )}
+      </div>
+      {blocked ? (
+        <button className="btn neon bottom" onClick={copyLink}>
+          {copy.addChain.blockedButton}
+        </button>
+      ) : (
+        <button
+          className="btn neon bottom"
+          onClick={() =>
+            switchChain(
+              { chainId: robinhoodChain.id },
+              { onSuccess: () => onToast(copy.toasts.chainSwitched) }
+            )
+          }
+          disabled={isPending}
+        >
+          {isPending ? 'adding…' : copy.addChain.button}
+        </button>
+      )}
+      <button className="linkish" style={{ margin: '10px auto 0' }} onClick={() => disconnect()}>
+        use a different wallet
+      </button>
+    </main>
+  );
+}
+
+/** Slim connected header: logo left, address chip + disconnect right. */
+export function WalletHeader() {
+  const { address } = useAccount();
+  const { disconnect } = useDisconnect();
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="mono">{address}</span>
-        <button className="secondary" style={{ marginTop: 0 }} onClick={() => disconnect()}>
-          Disconnect
+    <div className="logo" style={{ justifyContent: 'space-between' }}>
+      <b>YO DAWG</b>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span
+          className="mono"
+          style={{ background: 'rgba(255,255,255,.8)', borderRadius: 6, padding: '2px 6px' }}
+        >
+          {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : ''}
+        </span>
+        <button className="linkish" onClick={() => disconnect()}>
+          unplug
         </button>
-      </div>
-      {wrongChain && farcasterBlocked && (
-        <div className="banner" style={{ marginTop: 10 }}>
-          <strong>Known limitation:</strong> the Farcaster in-app wallet does not support Robinhood
-          Chain ({CHAIN_ID}) — it cannot add custom chains (no <span className="mono">wallet_addEthereumChain</span>),
-          and Robinhood is not in its built-in chain list. Open this app in a regular browser with an
-          injected wallet (MetaMask, Rabby, …) to launch tokens.
-        </div>
-      )}
-      {wrongChain && !farcasterBlocked && (
-        <div className="banner" style={{ marginTop: 10 }}>
-          Wrong network (chain {chainId}). This app runs on Robinhood Chain ({CHAIN_ID}).
-          <br />
-          <button onClick={() => switchChain({ chainId: robinhoodChain.id })} disabled={switching}>
-            {switching ? 'Switching…' : 'Switch / add Robinhood Chain'}
-          </button>
-          {switchError && (
-            <p className="error">
-              Chain switch failed: {switchError.message.split('\n')[0]}. If your wallet cannot add
-              chains, add Robinhood Chain manually (id {CHAIN_ID}, RPC
-              rpc.mainnet.chain.robinhood.com).
-            </p>
-          )}
-        </div>
-      )}
+      </span>
     </div>
   );
 }

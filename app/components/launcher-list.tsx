@@ -1,8 +1,9 @@
 'use client';
 
-import { useReadContract } from 'wagmi';
-import { launcherLauncherAbi } from '@/src/wrapper-abi';
-import { LAUNCHER_LAUNCHER_ADDRESS, APP_URL } from '../lib/wagmi';
+import { useAccount, useReadContract, useReadContracts } from 'wagmi';
+import { launcherAbi, launcherLauncherAbi } from '@/src/wrapper-abi';
+import { copy } from '../lib/copy';
+import { APP_URL, LAUNCHER_LAUNCHER_ADDRESS } from '../lib/wagmi';
 
 export type LauncherInfo = {
   launcher: `0x${string}`;
@@ -24,37 +25,100 @@ export function useLaunchers() {
 }
 
 export function LauncherList({
-  selected,
   onSelect,
+  onToast,
 }: {
-  selected: `0x${string}` | null;
   onSelect: (l: `0x${string}`) => void;
+  onToast: (msg: string) => void;
 }) {
+  const { address } = useAccount();
   const { launchers, isLoading } = useLaunchers();
 
-  return (
-    <div className="card">
-      <h2>Launchers</h2>
-      <p className="muted">
-        On-chain registry ({launchers.length}). Every launcher pairs its tokens with $HOODIE — that
-        rule ships in the shared implementation bytecode.
-      </p>
-      {isLoading && <p className="muted">Loading registry…</p>}
-      {!isLoading && launchers.length === 0 && <p className="muted">No launchers yet. Create the first one.</p>}
-      {launchers.map((l) => (
-        <div
-          key={l.launcher}
-          className={`launcher-item${selected === l.launcher ? ' selected' : ''}`}
-          onClick={() => onSelect(l.launcher)}
-        >
-          <div className="name">{l.name}</div>
-          <div className="mono muted">{l.launcher}</div>
-          <div className="muted">
-            launcher fee share {l.lpRewardBps / 100}% · created by {short(l.creator)}
-          </div>
-          <div className="muted mono">share: {`${APP_URL}/l/${l.launcher}`}</div>
+  const { data: counts } = useReadContracts({
+    contracts: launchers.map((l) => ({
+      address: l.launcher,
+      abi: launcherAbi,
+      functionName: 'launchCount' as const,
+    })),
+    query: { enabled: launchers.length > 0, refetchInterval: 15_000 },
+  });
+
+  const countFor = (i: number) => {
+    const r = counts?.[i];
+    return r && r.status === 'success' ? Number(r.result as bigint) : 0;
+  };
+
+  const mine = launchers
+    .map((l, i) => ({ ...l, count: countFor(i) }))
+    .filter((l) => address && l.creator.toLowerCase() === address.toLowerCase());
+  const others = launchers
+    .map((l, i) => ({ ...l, count: countFor(i) }))
+    .filter((l) => !address || l.creator.toLowerCase() !== address.toLowerCase());
+
+  async function copyShare(launcher: `0x${string}`) {
+    try {
+      await navigator.clipboard.writeText(`${APP_URL}/l/${launcher}`);
+      onToast(copy.toasts.copied);
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
+  function card(l: LauncherInfo & { count: number }, ownedByMe: boolean) {
+    return (
+      <div key={l.launcher} className="card clickable" onClick={() => onSelect(l.launcher)}>
+        <b style={{ fontSize: 13 }}>{l.name || short(l.launcher)}</b>
+        <div className="muted">
+          {ownedByMe
+            ? copy.home.meta(l.count, String(l.lpRewardBps / 100))
+            : copy.home.othersMeta(l.count, String(l.lpRewardBps / 100))}
         </div>
-      ))}
+        <div className="pill" style={{ marginTop: 8 }}>
+          {copy.home.pill}
+        </div>
+        <div style={{ marginTop: 6 }}>
+          <button
+            className="linkish"
+            onClick={(e) => {
+              e.stopPropagation();
+              copyShare(l.launcher);
+            }}
+          >
+            {copy.home.share(`${APP_URL}/l/${short(l.launcher)}`)}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="meme-caption sm" style={{ fontSize: 16, marginTop: 10 }}>
+        {copy.home.header}
+      </p>
+      {isLoading && (
+        <div className="card dashed">
+          <div className="muted">{copy.home.loading}</div>
+        </div>
+      )}
+      {!isLoading && mine.length === 0 && (
+        <div className="card dashed">
+          <div className="muted">{copy.home.mineEmpty}</div>
+        </div>
+      )}
+      {mine.map((l) => card(l, true))}
+
+      <p className="meme-caption sm" style={{ fontSize: 16, marginTop: 14 }}>
+        {copy.home.othersHeader}
+      </p>
+      {!isLoading && others.length === 0 && (
+        <div className="card dashed">
+          <div className="muted" style={{ whiteSpace: 'pre-line' }}>
+            {copy.home.empty}
+          </div>
+        </div>
+      )}
+      {others.map((l) => card(l, false))}
     </div>
   );
 }

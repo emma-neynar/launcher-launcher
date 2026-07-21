@@ -5,6 +5,7 @@ import { decodeEventLog } from 'viem';
 import { usePublicClient } from 'wagmi';
 import { CLANKER_FACTORY, EXPLORER_URL, HOODIE_ADDRESS } from '@/src/hoodie';
 import { clankerTokenCreatedEventAbi } from '@/src/wrapper-abi';
+import { copy } from '../lib/copy';
 
 export type PairingProof = {
   token: `0x${string}`;
@@ -43,24 +44,30 @@ export function proofFromLogs(
 
 export function ProofBox({ proof, txHash }: { proof: PairingProof; txHash?: `0x${string}` }) {
   return (
-    <div className="verify-box">
-      <div className={proof.isHoodie ? 'success' : 'error'} style={{ fontWeight: 600 }}>
-        {proof.isHoodie ? 'VERIFIED: paired with $HOODIE' : 'NOT PAIRED WITH $HOODIE'}
-      </div>
-      <div className="muted" style={{ marginTop: 6 }}>Token</div>
+    <div className="card" style={{ marginTop: 12 }}>
+      {proof.isHoodie ? (
+        <div className="stamp">{copy.verify.verified}</div>
+      ) : (
+        <p className="error-code" style={{ fontWeight: 700 }}>
+          {copy.verify.failed}
+        </p>
+      )}
+      <div className="hint" style={{ marginTop: 8 }}>token</div>
       <div className="mono">
         <a href={`${EXPLORER_URL}/token/${proof.token}`} target="_blank" rel="noreferrer">
           {proof.token}
         </a>
       </div>
-      <div className="muted" style={{ marginTop: 6 }}>Paired token (from the factory&apos;s TokenCreated event)</div>
+      <div className="hint" style={{ marginTop: 8 }}>
+        paired token (from the factory&apos;s TokenCreated event)
+      </div>
       <div className="mono">{proof.pairedToken}</div>
-      <div className="muted" style={{ marginTop: 6 }}>Pool ID</div>
+      <div className="hint" style={{ marginTop: 8 }}>pool ID</div>
       <div className="mono">{proof.poolId}</div>
       {txHash && (
-        <div style={{ marginTop: 6 }}>
+        <div style={{ marginTop: 8 }}>
           <a className="mono" href={`${EXPLORER_URL}/tx/${txHash}`} target="_blank" rel="noreferrer">
-            View transaction
+            view transaction
           </a>
         </div>
       )}
@@ -68,8 +75,8 @@ export function ProofBox({ proof, txHash }: { proof: PairingProof; txHash?: `0x$
   );
 }
 
-/** Standalone verifier: paste any deploy tx hash and check its pairing. */
-export function VerifyPairing() {
+/** The Verify view: paste any deploy tx hash and check its pairing on-chain. */
+export function VerifyPairing({ onBack }: { onBack: () => void }) {
   const publicClient = usePublicClient();
   const [tx, setTx] = useState('');
   const [proof, setProof] = useState<PairingProof | null>(null);
@@ -83,7 +90,7 @@ export function VerifyPairing() {
     try {
       const receipt = await publicClient!.getTransactionReceipt({ hash: tx as `0x${string}` });
       const p = proofFromLogs(receipt.logs);
-      if (!p) throw new Error('No Clanker TokenCreated event found in that transaction.');
+      if (!p) throw new Error('no Clanker TokenCreated event found in that transaction.');
       setProof(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -93,19 +100,31 @@ export function VerifyPairing() {
   }
 
   return (
-    <div className="card">
-      <h2>Verify $HOODIE pairing</h2>
-      <p className="muted">
-        Paste any launch transaction hash. We decode the Clanker factory&apos;s TokenCreated event
-        directly from the chain — no trust in this UI required.
-      </p>
-      <label>Transaction hash</label>
-      <input value={tx} onChange={(e) => setTx(e.target.value.trim())} placeholder="0x…" />
-      <button onClick={check} disabled={busy || !tx.startsWith('0x')}>
-        {busy ? 'Checking…' : 'Verify'}
+    <>
+      <button className="linkish" onClick={onBack}>
+        ← back
       </button>
-      {error && <p className="error">{error}</p>}
+      <h1 className="meme-caption" style={{ fontSize: 19 }}>
+        {copy.verify.title}
+      </h1>
+      <p className="meme-sub">{copy.verify.empty}</p>
+
+      <div className="field">
+        <label>{copy.verify.label}</label>
+        <input
+          className="input mono"
+          value={tx}
+          onChange={(e) => setTx(e.target.value.trim())}
+          placeholder="0x…"
+        />
+      </div>
+
+      <button className="btn neon" onClick={check} disabled={busy || !tx.startsWith('0x')}>
+        {busy ? copy.verify.checking : copy.verify.button}
+      </button>
+
+      {error && <p className="error-code">error: {error}</p>}
       {proof && <ProofBox proof={proof} txHash={tx as `0x${string}`} />}
-    </div>
+    </>
   );
 }

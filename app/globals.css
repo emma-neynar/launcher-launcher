@@ -1,15 +1,19 @@
+/*
+ * YO DAWG sticker system. Tokens + components from the creative direction doc.
+ * Palette: Clanker purple (primary), Robinhood neon (commit/lock), ink, paper.
+ * Fonts are self-hosted via @fontsource (Anton = Impact fallback, Comic Neue =
+ * Comic Sans fallback) imported in app/layout.tsx.
+ */
+
 :root {
-  --bg: #0d0f14;
-  --panel: #151823;
-  --panel-2: #1b1f2e;
-  --border: #2a2f42;
-  --text: #e8eaf2;
-  --muted: #8b91a7;
-  --accent: #7fe08d;
-  --accent-2: #58c46a;
-  --warn: #f0b34e;
-  --error: #f26d6d;
-  --lock: #b48cf2;
+  --purple: #8a63d2;
+  --neon: #ccff00;
+  --neon-ink: #1c2600;
+  --ink: #000000;
+  --paper: #ffffff;
+  --font-impact: Impact, 'Anton', 'Haettenschweiler', 'Arial Narrow Bold', 'Arial Black',
+    sans-serif;
+  --font-comic: 'Comic Sans MS', 'Comic Neue', cursive;
 }
 
 * {
@@ -18,195 +22,458 @@
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-size: 15px;
+  min-height: 100vh;
+  background-color: #141414;
+  background-image: url('/brand/backdrop-blue.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  font-family: var(--font-comic);
+  font-size: 14px;
   line-height: 1.45;
+  color: var(--ink);
 }
 
 main {
-  max-width: 560px;
+  max-width: 480px;
   margin: 0 auto;
-  padding: 20px 16px 64px;
-}
-
-h1 {
-  font-size: 22px;
-  margin: 8px 0 2px;
-}
-
-.subtitle {
-  color: var(--muted);
-  margin: 0 0 16px;
-  font-size: 13px;
-}
-
-.card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 14px;
-}
-
-.card h2 {
-  font-size: 15px;
-  margin: 0 0 10px;
-}
-
-label {
-  display: block;
-  font-size: 12px;
-  color: var(--muted);
-  margin: 10px 0 4px;
-}
-
-input,
-select {
-  width: 100%;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 9px 10px;
-  font-size: 14px;
-}
-
-input:focus,
-select:focus {
-  outline: none;
-  border-color: var(--accent-2);
-}
-
-button {
-  background: var(--accent);
-  color: #10241a;
-  font-weight: 600;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-size: 14px;
-  cursor: pointer;
-  margin-top: 12px;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-button.secondary {
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-
-.tabs {
+  padding: 16px 15px 72px;
   display: flex;
-  gap: 6px;
-  margin-bottom: 14px;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-.tabs button {
-  flex: 1;
-  margin-top: 0;
-  background: var(--panel);
-  color: var(--muted);
-  border: 1px solid var(--border);
+/* --------------------------------------------------------------------------
+ * Typography
+ * ------------------------------------------------------------------------ */
+
+.impact {
+  font-family: var(--font-impact);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.02;
+  font-weight: 400;
 }
 
-.tabs button.active {
-  background: var(--panel-2);
-  color: var(--text);
-  border-color: var(--accent-2);
+/* White Impact over imagery: black outline + hard shadow, always. */
+.meme-caption {
+  font-family: var(--font-impact);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.05;
+  text-align: center;
+  color: #fff;
+  -webkit-text-stroke: 2px #000;
+  paint-order: stroke fill;
+  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
+  white-space: pre-line;
+  margin: 6px 0 4px;
 }
 
-.locked-pair {
+.meme-caption.sm {
+  -webkit-text-stroke: 1.5px #000;
+}
+
+.meme-sub {
+  font-size: 12px;
+  text-align: center;
+  color: #111;
+  line-height: 1.4;
+  margin: 0 6px 8px;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 8px;
+  padding: 3px 6px;
+  white-space: pre-line;
+}
+
+.logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(180, 140, 242, 0.08);
-  border: 1px solid var(--lock);
-  border-radius: 8px;
-  padding: 10px;
-  margin-top: 10px;
-  font-size: 13px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
-.locked-pair .lock-icon {
-  font-size: 16px;
+.logo b {
+  font-family: var(--font-impact);
+  letter-spacing: 1px;
+  font-size: 18px;
+  font-weight: 400;
+  -webkit-text-stroke: 1px #000;
+  color: var(--neon);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.muted {
+  font-size: 11px;
+  color: #333;
 }
 
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 11px;
   word-break: break-all;
 }
 
-.muted {
-  color: var(--muted);
-  font-size: 12px;
+a {
+  color: inherit;
 }
 
-.success {
-  color: var(--accent);
+/* --------------------------------------------------------------------------
+ * Sticker buttons
+ * ------------------------------------------------------------------------ */
+
+.btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: var(--purple);
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  padding: 13px;
+  font-family: var(--font-impact);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 17px;
+  font-weight: 400;
+  color: #fff;
+  -webkit-text-stroke: 1px #000;
+  box-shadow: 4px 4px 0 var(--ink);
+  cursor: pointer;
+  transition: transform 0.05s ease, box-shadow 0.05s ease;
 }
 
-.error {
-  color: var(--error);
-  font-size: 13px;
-  word-break: break-word;
+.btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--ink);
 }
 
-.warn {
-  color: var(--warn);
-  font-size: 12px;
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-.banner {
-  background: rgba(240, 179, 78, 0.1);
-  border: 1px solid var(--warn);
-  border-radius: 8px;
+.btn.neon {
+  background: var(--neon);
+  color: var(--neon-ink);
+  -webkit-text-stroke: 0;
+}
+
+.btn.alt {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-text-stroke: 0;
+}
+
+.btn.sm {
   padding: 10px;
-  font-size: 13px;
-  margin-bottom: 12px;
+  font-size: 14px;
 }
 
-.launcher-item {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-top: 8px;
+.btn.bottom {
+  margin-top: auto;
+}
+
+/* --------------------------------------------------------------------------
+ * Cards, pills, fields
+ * ------------------------------------------------------------------------ */
+
+.card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 3px 3px 0 var(--ink);
+  margin-bottom: 10px;
+}
+
+.card.flat {
+  box-shadow: none;
+}
+
+.card.dashed {
+  border-style: dashed;
+  box-shadow: none;
+  text-align: center;
+}
+
+.card.clickable {
   cursor: pointer;
 }
 
-.launcher-item:hover,
-.launcher-item.selected {
-  border-color: var(--accent-2);
+.card.clickable:hover,
+.card.selected {
+  outline: 3px solid var(--purple);
 }
 
-.launcher-item .name {
-  font-weight: 600;
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--neon);
+  color: var(--neon-ink);
+  border: 2px solid var(--ink);
+  border-radius: 20px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: bold;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.field {
+  margin: 9px 0;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: bold;
+  display: block;
+  margin-bottom: 4px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 5px;
+  padding: 1px 4px;
+  width: fit-content;
+}
+
+.hint {
+  font-size: 10px;
+  color: #444;
+  margin-top: 2px;
+  font-style: italic;
+}
+
+.input {
+  width: 100%;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-family: var(--font-comic);
+  font-size: 13px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.input:focus {
+  outline: 3px solid var(--neon);
+}
+
+.input::placeholder {
+  color: #999;
+}
+
+.locked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--neon);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--neon-ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.warnbar {
+  background: var(--neon);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  padding: 9px;
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 1.35;
+  color: var(--neon-ink);
+  margin: 8px 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Hero (connect screen)
+ * ------------------------------------------------------------------------ */
+
+.hero {
+  position: fixed;
+  inset: 0;
+  background: url('/brand/yo-dawg-hoodie.jpg') center 20% / cover no-repeat;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.25),
+    rgba(0, 0, 0, 0) 30%,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(0, 0, 0, 0.35)
+  );
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px 15px;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --------------------------------------------------------------------------
+ * Stamp, spinner, mascot, modal, toast
+ * ------------------------------------------------------------------------ */
+
+.stamp {
+  display: inline-block;
+  border: 4px solid var(--ink);
+  color: var(--neon-ink);
+  font-family: var(--font-impact);
+  font-weight: 400;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 8px;
+  transform: rotate(-8deg);
+  font-size: 20px;
+  letter-spacing: 1px;
+  background: var(--neon);
+}
+
+.spin {
+  width: 54px;
+  height: 54px;
+  border: 6px solid var(--ink);
+  border-top-color: var(--neon);
+  border-radius: 50%;
+  margin: 0 auto 12px;
+  animation: sp 1s linear infinite;
+}
+
+@keyframes sp {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+    border-color: var(--neon);
+  }
+}
+
+.mascot {
+  width: 80px;
+  height: auto;
+  margin: 0 auto 6px;
+  display: block;
+  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.4));
+}
+
+.center {
+  margin: auto 0;
+  text-align: center;
 }
 
 .row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
-.row > div {
+.row > .field,
+.row > .btn {
   flex: 1;
 }
 
-a {
-  color: var(--accent);
+.row > .field.grow {
+  flex: 2;
 }
 
-.verify-box {
-  border: 1px solid var(--accent-2);
-  background: rgba(127, 224, 141, 0.06);
-  border-radius: 8px;
-  padding: 12px;
-  margin-top: 12px;
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.modal {
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 5px 5px 0 var(--ink);
+  width: 100%;
+  max-width: 420px;
+}
+
+.modal-title {
+  font-family: var(--font-impact);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 20px;
+  color: var(--purple);
+  -webkit-text-stroke: 1px #000;
+  text-align: center;
+  margin: 0 0 6px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--neon);
+  color: var(--neon-ink);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 var(--ink);
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: bold;
+  z-index: 60;
+  max-width: calc(100% - 32px);
+}
+
+.tooltip-box {
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 3px 3px 0 var(--ink);
+  padding: 9px 10px;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+/* Plain-text buttons (tooltip trigger, links) */
+.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: #333;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+details.advanced summary {
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 5px;
+  padding: 2px 5px;
+  width: fit-content;
+}
+
+.error-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #333;
 }

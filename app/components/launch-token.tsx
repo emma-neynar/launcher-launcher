@@ -1,7 +1,9 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from 'wagmi';
+import { EXPLORER_URL } from '@/src/hoodie';
 import { launcherAbi } from '@/src/wrapper-abi';
 import {
   DEFAULT_MARKET_CAP_USD,
@@ -12,21 +14,41 @@ import {
   tickForMarketCapUsd,
 } from '@/src/tick';
 import { fetchHoodiePriceUsd, type HoodiePrice } from '@/src/hoodie-price';
+import { copy } from '../lib/copy';
+import { APP_URL } from '../lib/wagmi';
 import { LockedPair } from './locked-pair';
-import { type PairingProof, ProofBox, proofFromLogs } from './verify-pairing';
+import { type PairingProof, proofFromLogs } from './verify-pairing';
 
-export function LaunchToken({ launcher }: { launcher: `0x${string}` | null }) {
+type Phase = 'form' | 'confirm' | 'launching' | 'success' | 'error';
+
+/**
+ * Screens 5–9: the launch flow as its own little state machine.
+ * form → confirm (modal) → launching (full-screen) → success | error.
+ * The contract call and its arguments are untouched from the prototype —
+ * this is a skin + copy pass only.
+ */
+export function LaunchToken({
+  launcher,
+  onBack,
+  onToast,
+  onDone,
+}: {
+  launcher: `0x${string}`;
+  onBack: () => void;
+  onToast: (msg: string) => void;
+  onDone: () => void;
+}) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
   const { data: launcherName } = useReadContract({
-    address: launcher ?? undefined,
+    address: launcher,
     abi: launcherAbi,
     functionName: 'launcherName',
-    query: { enabled: Boolean(launcher) },
   });
 
+  const [phase, setPhase] = useState<Phase>('form');
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [image, setImage] = useState('');
@@ -38,10 +60,12 @@ export function LaunchToken({ launcher }: { launcher: `0x${string}` | null }) {
   const [price, setPrice] = useState<HoodiePrice | null>(null);
   const [priceError, setPriceError] = useState('');
 
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [isPairingError, setIsPairingError] = useState(false);
+  const [errorDetail, setErrorDetail] = useState('');
   const [proof, setProof] = useState<PairingProof | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [lineIdx, setLineIdx] = useState(0);
 
   async function loadPrice() {
     setPriceError('');
@@ -57,19 +81,29 @@ export function LaunchToken({ launcher }: { launcher: `0x${string}` | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Rotate the meme lines while the launching screen is up.
+  useEffect(() => {
+    if (phase !== 'launching') return;
+    const t = setInterval(
+      () => setLineIdx((i) => (i + 1) % copy.launching.lines.length),
+      1800
+    );
+    return () => clearInterval(t);
+  }, [phase]);
+
   // USD market cap -> starting tick via the live $HOODIE price. Manual tick overrides.
   const { tick, tickError } = useMemo(() => {
     if (manualTick !== '') {
       const t = Number(manualTick);
       if (!Number.isInteger(t) || t % TICK_SPACING !== 0) {
-        return { tick: null, tickError: `Manual tick must be a multiple of ${TICK_SPACING}` };
+        return { tick: null, tickError: `manual tick must be a multiple of ${TICK_SPACING}` };
       }
       return { tick: t, tickError: '' };
     }
     if (!price) {
       return {
         tick: null,
-        tickError: 'No live $HOODIE price — retry the price fetch or set a manual tick below.',
+        tickError: 'no live $HOODIE price — retry the fetch or set a manual tick below.',
       };
     }
     try {
@@ -79,15 +113,27 @@ export function LaunchToken({ launcher }: { launcher: `0x${string}` | null }) {
     }
   }, [marketCapUsd, manualTick, price]);
 
+  const mcapDisplay = useMemo(() => {
+    if (tick !== null && price) {
+      return `$${marketCapUsdForTick(tick, price.priceUsd).toLocaleString(undefined, {
+        maximumFractionDigits: 0,
+      })}`;
+    }
+    const n = Number(marketCapUsd);
+    return Number.isFinite(n) ? `$${n.toLocaleString()}` : marketCapUsd;
+  }, [tick, price, marketCapUsd]);
+
   async function launch() {
-    if (!launcher || tick === null) return;
-    setBusy(true);
-    setError('');
+    if (tick === null) return;
+    setPhase('launching');
+    setFormError('');
     setProof(null);
+    setTxHash(undefined);
     try {
       const fee = Math.round(Number(feeBps));
-      if (!Number.isInteger(fee) || fee < 0 || fee > 1000) throw new Error('Fee must be 0–1000 bps');
-      if (!address) throw new Error('Connect a wallet first');
+      if (!Number.isInteger(fee) || fee < 0 || fee > 1000)
+        throw new Error('fee must be 0–1000 bps');
+      if (!address) throw new Error('connect a wallet first');
 
       const hash = await writeContractAsync({
         address: launcher,
@@ -109,98 +155,299 @@ export function LaunchToken({ launcher }: { launcher: `0x${string}` | null }) {
         ],
       });
       setTxHash(hash);
+      onToast(copy.toasts.txSubmitted);
       const receipt = await publicClient!.waitForTransactionReceipt({ hash });
       const p = proofFromLogs(receipt.logs);
-      if (!p) throw new Error('Launch confirmed but no TokenCreated event found');
+      if (!p) throw new Error('launch confirmed but no TokenCreated event found');
       setProof(p);
+      setPhase('success');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/user rejected|denied|user cancelled/i.test(msg)) {
+        // The user just backed out of the signature — keep it light.
+        setFormError('signature declined — no launch happened.');
+        setPhase('form');
+        return;
+      }
+      setIsPairingError(/hoodie|pair/i.test(msg));
+      setErrorDetail(msg.split('\n')[0]);
+      setPhase('error');
     }
   }
 
-  if (!launcher) {
+  async function share() {
+    const url = `${APP_URL}/l/${launcher}`;
+    const text = copy.success.shareCast(url);
+    try {
+      const { sdk } = await import('@farcaster/miniapp-sdk');
+      await sdk.actions.composeCast({ text, embeds: [url] });
+    } catch {
+      // Outside a Farcaster host: fall back to the clipboard.
+      try {
+        await navigator.clipboard.writeText(text);
+        onToast(copy.toasts.copied);
+      } catch {
+        /* clipboard unavailable */
+      }
+    }
+  }
+
+  function resetForAnother() {
+    setName('');
+    setSymbol('');
+    setImage('');
+    setDescription('');
+    setProof(null);
+    setTxHash(undefined);
+    setPhase('form');
+  }
+
+  /* ---------- launching (screen 6) ---------- */
+  if (phase === 'launching') {
     return (
-      <div className="card">
-        <h2>Launch a token</h2>
-        <p className="muted">Select a launcher from the list first (or create one).</p>
+      <div className="center" style={{ flex: 1 }}>
+        <div className="spin" aria-hidden />
+        <p className="meme-caption sm" style={{ fontSize: 15, marginTop: 16 }} aria-live="polite">
+          {copy.launching.lines[lineIdx]}
+        </p>
+        <p className="meme-sub" style={{ marginTop: 8 }}>
+          {txHash ? copy.launching.status : 'waiting for your signature…'}
+        </p>
       </div>
     );
   }
 
+  /* ---------- success (screen 7) ---------- */
+  if (phase === 'success' && proof) {
+    return (
+      <div className="center" style={{ flex: 1 }}>
+        <Image
+          src="/brand/yo-dawg-transparent.png"
+          alt="Yo Dawg mascot"
+          width={140}
+          height={140}
+          className="mascot"
+        />
+        <h1 className="meme-caption" style={{ fontSize: 22, whiteSpace: 'pre-line' }}>
+          {copy.success.title}
+        </h1>
+        {proof.isHoodie ? (
+          <div className="stamp">{copy.success.stamp}</div>
+        ) : (
+          <p className="error-code">{copy.verify.failed}</p>
+        )}
+        <div className="card" style={{ width: '100%', textAlign: 'left', marginTop: 12 }}>
+          <div className="hint">{copy.success.tokenLabel}</div>
+          <div className="mono">
+            <a href={`${EXPLORER_URL}/token/${proof.token}`} target="_blank" rel="noreferrer">
+              {proof.token}
+            </a>
+          </div>
+          <div className="hint" style={{ marginTop: 8 }}>
+            {copy.success.pairedLabel}
+          </div>
+          <div>{proof.isHoodie ? copy.success.pairedValue : <span className="mono">{proof.pairedToken}</span>}</div>
+          {txHash && (
+            <div style={{ marginTop: 8 }}>
+              <a className="mono" href={`${EXPLORER_URL}/tx/${txHash}`} target="_blank" rel="noreferrer">
+                view transaction
+              </a>
+            </div>
+          )}
+        </div>
+        <button className="btn neon" style={{ width: '100%', marginTop: 12 }} onClick={share}>
+          {copy.success.button}
+        </button>
+        <button className="linkish" style={{ marginTop: 10 }} onClick={resetForAnother}>
+          launch another one
+        </button>
+        <button className="linkish" style={{ marginTop: 4 }} onClick={onDone}>
+          back to the launchers
+        </button>
+      </div>
+    );
+  }
+
+  /* ---------- error (screen 8) ---------- */
+  if (phase === 'error') {
+    return (
+      <div className="center" style={{ flex: 1 }}>
+        <Image
+          src="/brand/yo-dawg-transparent.png"
+          alt="Yo Dawg mascot"
+          width={140}
+          height={140}
+          className="mascot"
+        />
+        <h1 className="meme-caption" style={{ fontSize: 22 }}>
+          {isPairingError ? copy.error.title : copy.error.genericTitle}
+        </h1>
+        <p className="meme-sub">{isPairingError ? copy.error.pairingBody : copy.error.genericBody}</p>
+        <p className="error-code">{isPairingError ? copy.error.pairingCode : `error: ${errorDetail}`}</p>
+        <button className="btn" style={{ width: '100%', marginTop: 12 }} onClick={() => setPhase('form')}>
+          {isPairingError ? copy.error.button : copy.error.genericButton}
+        </button>
+      </div>
+    );
+  }
+
+  /* ---------- form (screen 5) + confirm modal ---------- */
   return (
-    <div className="card">
-      <h2>Launch a token {launcherName ? `via “${launcherName}”` : ''}</h2>
+    <>
+      <button className="linkish" onClick={onBack}>
+        ← back
+      </button>
+      <h1 className="meme-caption" style={{ fontSize: 19 }}>
+        {copy.launch.title}
+      </h1>
+      {launcherName ? <p className="meme-sub">via “{launcherName}”</p> : null}
+
       <div className="row">
-        <div>
-          <label>Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Token" />
+        <div className="field grow">
+          <label>{copy.launch.nameLabel}</label>
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="hoodie coin"
+          />
         </div>
-        <div>
-          <label>Symbol</label>
-          <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder="MTK" maxLength={12} />
+        <div className="field">
+          <label>{copy.launch.tickerLabel}</label>
+          <input
+            className="input"
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            placeholder="HOOD2"
+            maxLength={12}
+            style={{ width: 110 }}
+          />
         </div>
       </div>
-      <label>Image URL (http or ipfs, optional)</label>
-      <input value={image} onChange={(e) => setImage(e.target.value.trim())} placeholder="ipfs://…" />
-      <label>Description (optional)</label>
-      <input value={description} onChange={(e) => setDescription(e.target.value)} />
-      <div className="row">
-        <div>
-          <label>Target starting market cap (USD)</label>
-          <input value={marketCapUsd} onChange={(e) => setMarketCapUsd(e.target.value)} inputMode="decimal" disabled={manualTick !== ''} />
+
+      <div className="field">
+        <label>{copy.launch.mcapLabel}</label>
+        <input
+          className="input"
+          value={marketCapUsd}
+          onChange={(e) => setMarketCapUsd(e.target.value)}
+          inputMode="decimal"
+          disabled={manualTick !== ''}
+        />
+        <div className="hint">{copy.launch.mcapHint}</div>
+        {price ? (
+          <div className="hint">
+            $HOODIE ≈ <span className="mono">${price.priceUsd.toPrecision(4)}</span> ({price.source}
+            ){' · '}
+            <button
+              className="linkish"
+              onClick={(e) => {
+                e.preventDefault();
+                loadPrice();
+              }}
+            >
+              refresh
+            </button>
+            {tick !== null && (
+              <>
+                {' · '}opens ≈{' '}
+                {marketCapForTick(tick).toLocaleString(undefined, { maximumFractionDigits: 0 })}{' '}
+                $HOODIE ({mcapDisplay})
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="warnbar">
+            no live $HOODIE price{priceError ? ` (${priceError})` : ''}.{' '}
+            <button
+              className="linkish"
+              onClick={(e) => {
+                e.preventDefault();
+                loadPrice();
+              }}
+            >
+              retry
+            </button>{' '}
+            — or set a manual tick in the extra knobs.
+          </div>
+        )}
+      </div>
+
+      <LockedPair />
+
+      <details className="advanced">
+        <summary>{copy.launch.advanced}</summary>
+        <div className="field">
+          <label>image URL (http or ipfs)</label>
+          <input
+            className="input"
+            value={image}
+            onChange={(e) => setImage(e.target.value.trim())}
+            placeholder="ipfs://…"
+          />
         </div>
-        <div>
+        <div className="field">
+          <label>description</label>
+          <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+        <div className="field">
           <label>LP fee (bps, each side, max 1000)</label>
-          <input value={feeBps} onChange={(e) => setFeeBps(e.target.value)} inputMode="numeric" />
+          <input
+            className="input"
+            value={feeBps}
+            onChange={(e) => setFeeBps(e.target.value)}
+            inputMode="numeric"
+          />
         </div>
-      </div>
-      {price ? (
-        <p className="muted">
-          $HOODIE price: <span className="mono">${price.priceUsd.toPrecision(4)}</span> — source:{' '}
-          {price.source}.{' '}
-          <a href="#" onClick={(e) => { e.preventDefault(); loadPrice(); }}>Refresh</a>
-        </p>
-      ) : (
-        <p className="warn">
-          Could not fetch a live $HOODIE price{priceError ? ` (${priceError})` : ''}.{' '}
-          <a href="#" onClick={(e) => { e.preventDefault(); loadPrice(); }}>Retry</a> — or use the
-          manual tick override below.
-        </p>
-      )}
-      <label>Manual tick override (advanced — leave empty to use market cap)</label>
-      <input value={manualTick} onChange={(e) => setManualTick(e.target.value.trim())} placeholder={`contract fallback ${DEFAULT_TICK}`} />
-      {manualTick !== '' && (
-        <p className="warn">
-          Manual tick overrides the market-cap input — you are setting the raw starting price.
-          {tick !== null && (
-            <>
-              {' '}Tick {tick} ≈{' '}
+        <div className="field">
+          <label>manual tick override (leave empty to use market cap)</label>
+          <input
+            className="input"
+            value={manualTick}
+            onChange={(e) => setManualTick(e.target.value.trim())}
+            placeholder={`contract fallback ${DEFAULT_TICK}`}
+          />
+          {manualTick !== '' && tick !== null && (
+            <div className="warnbar" style={{ marginTop: 6 }}>
+              manual tick {tick} ≈{' '}
               {marketCapForTick(tick).toLocaleString(undefined, { maximumFractionDigits: 0 })} $HOODIE
               {price
-                ? ` (≈ $${marketCapUsdForTick(tick, price.priceUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })})`
+                ? ` (≈ ${mcapDisplay})`
                 : ' (USD unknown — no live price)'}{' '}
-              starting market cap. Make sure that is what you want.
-            </>
+              opening market cap. you&apos;re setting the raw starting price, dawg.
+            </div>
           )}
-        </p>
-      )}
-      {manualTick === '' && tick !== null && price && (
-        <p className="muted">
-          Starting tick: <span className="mono">{tick}</span> ≈{' '}
-          {marketCapForTick(tick).toLocaleString(undefined, { maximumFractionDigits: 0 })} $HOODIE ≈ $
-          {marketCapUsdForTick(tick, price.priceUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}{' '}
-          starting market cap.
-        </p>
-      )}
-      {tickError && <p className="error">{tickError}</p>}
-      <LockedPair />
-      <button onClick={launch} disabled={busy || !name || !symbol || tick === null}>
-        {busy ? 'Launching…' : 'Launch (you sign the transaction)'}
+        </div>
+      </details>
+
+      {tickError && <p className="error-code">error: {tickError}</p>}
+      {formError && <p className="error-code">error: {formError}</p>}
+
+      <button
+        className="btn neon bottom"
+        onClick={() => setPhase('confirm')}
+        disabled={!name || !symbol || tick === null}
+      >
+        {copy.launch.button}
       </button>
-      {error && <p className="error">{error}</p>}
-      {proof && <ProofBox proof={proof} txHash={txHash} />}
-    </div>
+
+      {phase === 'confirm' && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal">
+            <div className="modal-title">{copy.confirm.title}</div>
+            <p>{copy.confirm.body(`$${symbol}`, mcapDisplay)}</p>
+            <div className="warnbar">{copy.confirm.warn}</div>
+            <div className="row" style={{ marginTop: 12 }}>
+              <button className="btn alt" onClick={() => setPhase('form')}>
+                {copy.confirm.cancel}
+              </button>
+              <button className="btn neon" onClick={launch}>
+                {copy.confirm.confirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
