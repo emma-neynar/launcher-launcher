@@ -29,7 +29,7 @@ This is "enforced in the interface + verifiable on-chain," not "enforced by byte
 **Storage: one async interface, two backends** (`src/registry.ts`, the only module that touches storage — CLI and API routes share it):
 
 - **JSON file** (`registry/launchers.json`) — the default. Local dev, the CLI, and any host with a persistent disk.
-- **Vercel KV / Upstash Redis** — selected automatically when REST credentials are present in the environment. The chosen host is **Vercel**, whose serverless filesystem is ephemeral, so the hosted deployment uses Vercel KV (Upstash under the hood, via the Vercel Marketplace). Both env-var conventions work: `KV_REST_API_URL`/`KV_REST_API_TOKEN` (what the Vercel integration injects) or `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (what the Upstash dashboard shows) — same credentials. The whole registry is one tiny JSON value under one key; read-modify-write is fine at this scale.
+- **Upstash Redis (via the Vercel Marketplace)** — selected automatically when REST credentials are present in the environment. The host is **Vercel**, whose serverless filesystem is ephemeral, so the production deployment at [yodawg-launcher.vercel.app](https://yodawg-launcher.vercel.app) uses a Marketplace-connected Upstash Redis database. Both env-var conventions work: `KV_REST_API_URL`/`KV_REST_API_TOKEN` (what the Vercel integration injects) or `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (what the Upstash dashboard shows) — same credentials. The whole registry is one tiny JSON value under one key; read-modify-write is fine at this scale.
 
 The heavier alternative — a minimal registry-ONLY contract (same three fields, still no fund handling) — was deliberately **not** picked for the base submission because it would reintroduce a funded mainnet deploy; it remains a straightforward swap later since every consumer goes through the same registry module.
 
@@ -159,7 +159,7 @@ The CLI enforces the rule at the same choke point (`src/hoodie-lock.ts`): hardco
 |---|---|
 | clanker-sdk: `robinhood`, `clankerConfigFor`, `getDeployTransaction` | read-only / pure encoding |
 | clanker-sdk: `deploySimulate` | read-only `eth_call` |
-| Registry API (`app/api/launchers`) | registry store only (JSON file or Vercel KV) — nothing on-chain, no funds |
+| Registry API (`app/api/launchers`) | registry store only (JSON file or Upstash Redis) — nothing on-chain, no funds |
 | Clanker factory `deployToken` (mini app) | **write** — signed by the end user's own wallet |
 | Clanker factory `deployToken` (CLI) | **write** — gated behind `--live` + typed `LAUNCH` |
 | Optional wrapper: `allLaunchers`, `launcherCount`, `HOODIE`, `tokens`, event decoding | read-only |
@@ -173,31 +173,22 @@ The CLI enforces the rule at the same choke point (`src/hoodie-lock.ts`): hardco
 - All default paths are local/simulated (Anvil fork, `eth_call`, dry-run CLI). Mainnet actions are single, separate, explicitly-gated steps — the mini app's only write is the user signing their own launch; CLI/scripts require typed confirmations — never automatic.
 - Docs note: pairing with arbitrary quote tokens is [explicitly permissionless at the factory](https://clanker.world/docs/references/supported-quote-tokens); the whitelist only constrains the @clanker bot/API. `npm run expected-position` emits the config to get these launches recognized.
 
-## Go-live checklist (the remaining human steps)
+## Go-live checklist (what shipped, what's left)
 
-**No funded contract deploy is required.** The base submission is the mini app + registry backend.
+**No funded contract deploy was required.** The base submission is the mini app + registry backend — and it is live.
 
-**Chosen stack: Vercel (host) + Vercel KV (registry) + a clanker.world subdomain (stable manifest domain, pending Clanker-team DNS).** The ephemeral trycloudflare quick tunnel stays usable for live demos, but it **cannot** be the manifest domain: the signed `accountAssociation` binds the app's identity to one exact permanent domain.
+**Shipped stack: Vercel (host) + Upstash Redis via the Vercel Marketplace (registry) + the plain `*.vercel.app` domain.** Production: **<https://yodawg-launcher.vercel.app>** — Vercel project `yodawg-launcher` on the emma-neynars-projects team, deployed initially via the Vercel MCP plugin and now linked to the GitHub repo (`emma-neynar/launcher-launcher`), so **pushes to `main` auto-deploy**. The clanker.world-subdomain plan was dropped in favor of the plain vercel.app domain: the signed `accountAssociation` binds the app's identity to one exact permanent domain, and `yodawg-launcher.vercel.app` is that domain.
 
-1. **Create/link the Vercel project** (the CLI on this machine is installed but not logged in):
+Already done:
 
-   ```bash
-   vercel login              # authenticate as the owning account
-   vercel link               # link this repo to a new/existing project
-   vercel deploy --prod      # first deployment (a *.vercel.app URL)
-   ```
+- **Hosting + git deploys** — project created, first production deployment shipped, repo connected with push-to-main auto-deploys.
+- **Registry persistence** — Upstash Redis ("upstash-kv-orange-basket") connected through the Vercel Marketplace; the injected `KV_REST_API_*` env vars flip the registry from the JSON file to Redis automatically. Verified with a live persistence probe: a launcher POSTed to `/api/launchers` survives a redeploy.
+- **Env vars (Production)** — `NEXT_PUBLIC_APP_URL=https://yodawg-launcher.vercel.app`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, and `FARCASTER_ACCOUNT_ASSOCIATION` (signed by the clanker account, fid 874542, for exactly this domain), plus the injected KV vars.
+- **Manifest** — served dynamically at `/.well-known/farcaster.json`, passes the Farcaster validator (subtitle ≤ 30 chars, description ≤ 170, no special characters — hence the $-less "HOODIE" wording in the manifest copy), `accountAssociation` live.
 
-2. **Provision Vercel KV** (dashboard step — not available from the CLI): Vercel dashboard → project → *Storage* → *Create database* → KV (Upstash via the Marketplace) → connect it to the project. This auto-injects `KV_REST_API_URL` + `KV_REST_API_TOKEN` into the project env; the registry switches to KV automatically (self-provisioned Upstash creds `UPSTASH_REDIS_REST_URL`/`TOKEN` work identically).
-3. **Set the remaining env vars** on the project (dashboard or `vercel env add <NAME> production`): `NEXT_PUBLIC_RPC_URL=https://rpc.mainnet.chain.robinhood.com`, `NEXT_PUBLIC_APP_URL` (the permanent domain, next step), and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free id from [cloud.reown.com](https://cloud.reown.com) — recommended so mobile browsers can connect an external wallet).
-4. **Stable domain — clanker.world subdomain** (e.g. `yodawg.clanker.world`), two sides:
-   - *Vercel side:* project → *Settings* → *Domains* → add `yodawg.clanker.world`. Vercel displays the required CNAME target (typically `cname.vercel-dns.com`).
-   - *Clanker side:* the Clanker team (who control clanker.world DNS) adds that CNAME record for the chosen subdomain.
-   - Then set `NEXT_PUBLIC_APP_URL=https://yodawg.clanker.world` and redeploy. Share links, `fc:miniapp` embeds, the dynamic manifest, and all image URLs derive from this one variable — nothing else to edit.
-5. **Verify registry persistence across a redeploy** (KV, not memory): `curl -X POST https://<domain>/api/launchers -H 'content-type: application/json' -d '{"name":"probe","feeRecipient":"0x000000000000000000000000000000000000dEaD","lpRewardBps":2000}'`, trigger a redeploy, then `curl https://<domain>/api/launchers` — the probe launcher must still be there.
-6. **Sign the manifest** (only the account owner can do this): open the [Farcaster manifest tool](https://farcaster.xyz/~/developers/mini-apps/manifest), enter the **exact final domain** (`yodawg.clanker.world`), sign with the **Farcaster custody key of the owning account**, and paste the resulting `{header,payload,signature}` JSON into the `FARCASTER_ACCOUNT_ASSOCIATION` env var on Vercel; redeploy. The dynamic manifest route then serves it; it omits the key entirely until this is done.
-7. **Validate the manifest** in the Farcaster developer tools (manifest tool / preview at `farcaster.xyz/~/developers`) — the manifest at `https://<domain>/.well-known/farcaster.json` must pass, and the embed preview should render the card.
-8. **Mobile test in a real Farcaster client:** open the mini app on a phone, confirm splash → ready() → connect (WalletConnect path) works and the known host-wallet limitation banner appears where expected.
-9. **Mainnet smoke test (real gas, human-gated):** create a launcher in the UI, launch a token with a real wallet, and confirm the post-launch proof panel and `npm run ll -- verify --tx 0x…` both show the $HOODIE pairing.
-10. **Send the whitelist request:** run `npm run expected-position` and hand the output to the Clanker side so clanker.world adds the (pairedToken + tick) config to its expected positions.
-11. Cast the app URL (or any `/l/<launcher-id>` URL) — it renders as a launchable Mini App card.
-12. *(Optional, trustless mode)* Deploy the on-chain wrapper later with `npm run deploy:live` (typed `DEPLOY`, fresh dev wallet) — not needed for the base submission.
+What's left:
+
+1. **Mainnet smoke test (real gas, human-gated):** create a launcher in the UI, launch a token with a real wallet, and confirm the post-launch proof panel and `npm run ll -- verify --tx 0x…` both show the $HOODIE pairing.
+2. **Send the whitelist request:** run `npm run expected-position` and hand the output to the Clanker side so clanker.world adds the (pairedToken + tick) config to its expected positions.
+3. **Cast the app URL** (or any `/l/<launcher-id>` URL) — it renders as a launchable Mini App card.
+4. *(Optional, trustless mode)* Deploy the on-chain wrapper later with `npm run deploy:live` (typed `DEPLOY`, fresh dev wallet) — not needed for the base submission.
