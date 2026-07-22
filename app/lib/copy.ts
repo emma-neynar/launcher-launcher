@@ -41,6 +41,8 @@ export const copy = {
     header: 'your launchers',
     othersHeader: "everyone else's launchers",
     meta: (n: number) => `${n} token${n === 1 ? '' : 's'} launched`,
+    // Creator identity on a launcher card — takes "@username" or a short 0x address.
+    creator: (who: string) => `by ${who}`,
     empty: 'no launchers yet.\nbe the first, dawg.',
     mineEmpty: 'none yet. the button below fixes that.',
     loading: 'loading…',
@@ -105,6 +107,17 @@ export const copy = {
       'it’s launchers all the way down…',
     ],
     status: 'confirming on robinhood chain…',
+    viewTx: 'watch it on the explorer →',
+  },
+
+  // The honest "still pending" screen: the receipt didn't arrive within the
+  // bounded wait, so we show the hash instead of spinning forever.
+  pending: {
+    title: 'still cooking, dawg',
+    body: "the chain hasn't confirmed your launch yet. slow isn't dead — here's the receipt.",
+    txLabel: 'your transaction',
+    hint: 'we keep watching — this flips to success the moment it lands. or check the explorer yourself.',
+    dismiss: 'back to the launchers',
   },
 
   success: {
@@ -126,6 +139,13 @@ export const copy = {
     // Honest variant for everything else (rejected tx, gas, rpc…).
     genericTitle: 'that didn’t launch, dawg',
     genericBody: 'the chain said no. nothing was launched — run it back.',
+    // The wallet never returned a tx hash (seen with the farcaster host wallet
+    // on chains it can't fully reach) — distinct from an on-chain failure.
+    walletTimeoutTitle: 'your wallet ghosted, dawg',
+    walletTimeoutBody:
+      'we never got a transaction hash back from your wallet, so nothing was launched. if this keeps happening in farcaster, open the app in a browser with metamask or rabby.',
+    // Thrown pre-send when the connected wallet isn't on chain 4663.
+    wrongChain: 'your wallet drifted off robinhood chain (4663) — reconnect and run it back.',
     button: 'fine, keep the hoodie',
     genericButton: 'run it back',
   },
@@ -175,5 +195,6 @@ export const copy = {
     txSubmitted: 'sent it. waiting on the chain…',
     copied: 'copied, dawg',
     chainSwitched: 'welcome to robinhood chain, dawg',
+    registryFailed: "token's live on-chain, but the registry didn't hear about it. still counts.",
   },
 } as const;

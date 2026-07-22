@@ -14,3 +14,4 @@ contracts/cache/
 contracts/broadcast/
 tsconfig.tsbuildinfo
 .clean-check/
+.vercel

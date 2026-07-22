@@ -15,6 +15,14 @@ export type Launcher = {
    */
   lpRewardBps: number;
   description?: string;
+  /**
+   * Farcaster identity of whoever created the launcher, captured from the
+   * mini-app sdk.context at creation time. All optional: entries created
+   * before this existed (or from the CLI / plain web) simply lack them.
+   */
+  creatorFid?: number;
+  creatorUsername?: string;
+  creatorPfpUrl?: string;
   /** Always HOODIE_ADDRESS. Stored for display; never read as an input to a deploy. */
   pairedToken: typeof HOODIE_ADDRESS;
   createdAt: string;

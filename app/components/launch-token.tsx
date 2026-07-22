@@ -2,9 +2,10 @@
 
 import { Clanker } from 'clanker-sdk/v4';
 import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { TransactionReceipt } from 'viem';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
-import { EXPLORER_URL } from '@/src/hoodie';
+import { CHAIN_ID, EXPLORER_URL } from '@/src/hoodie';
 import { assertHoodieInCalldata, buildLockedTokenConfig } from '@/src/hoodie-lock';
 import { fetchHoodiePriceUsd, type HoodiePrice } from '@/src/hoodie-price';
 import type { Launcher } from '@/src/registry';
@@ -15,7 +16,27 @@ import { FeeSplit } from './fee-split';
 import { LockedPair } from './locked-pair';
 import { type PairingProof, proofFromLogs } from './verify-pairing';
 
-type Phase = 'form' | 'confirm' | 'launching' | 'success' | 'error';
+type Phase = 'form' | 'confirm' | 'launching' | 'pending' | 'success' | 'error';
+type ErrorKind = 'pairing' | 'walletTimeout' | 'generic';
+
+/**
+ * How long the wallet gets to come back with a tx hash after the user
+ * confirms. The Farcaster host wallet proxies eth_sendTransaction and has
+ * been observed to never resolve it on chains it can't fully reach — without
+ * a bound the launching spinner would hang forever.
+ */
+const WALLET_RESPONSE_TIMEOUT_MS = 120_000;
+/**
+ * Bounded receipt wait (against OUR http RPC transport, never the wallet
+ * provider) before we stop spinning and show the honest "still pending"
+ * screen with the hash + explorer link.
+ */
+const RECEIPT_TIMEOUT_MS = 90_000;
+/** While on the pending screen, keep re-checking this many times (~30 min). */
+const MAX_PENDING_RECHECKS = 20;
+
+const WALLET_TIMEOUT = Symbol('wallet-timeout');
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
  * Screens 5–9: the launch flow. OFF-CHAIN enforcement model (the primary
@@ -41,7 +62,7 @@ export function LaunchToken({
   onToast: (msg: string) => void;
   onDone: () => void;
 }) {
-  const { address } = useAccount();
+  const { address, chainId: walletChainId } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
@@ -54,11 +75,15 @@ export function LaunchToken({
   const [price, setPrice] = useState<HoodiePrice | null>(null);
 
   const [formError, setFormError] = useState('');
-  const [isPairingError, setIsPairingError] = useState(false);
+  const [errorKind, setErrorKind] = useState<ErrorKind>('generic');
   const [errorDetail, setErrorDetail] = useState('');
   const [proof, setProof] = useState<PairingProof | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [lineIdx, setLineIdx] = useState(0);
+
+  // Bumped whenever the user leaves an in-flight launch (dismiss / retry) so
+  // stale background receipt-watchers and late wallet responses become no-ops.
+  const launchSeq = useRef(0);
 
   // USD display only — the tick itself is fixed and never depends on this.
   useEffect(() => {
@@ -89,13 +114,86 @@ export function LaunchToken({
     : null;
   const mcapDisplay = openingUsd ?? `${openingHoodie} $HOODIE`;
 
+  function fail(e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    setErrorKind(/hoodie|pair/i.test(msg) ? 'pairing' : 'generic');
+    setErrorDetail(msg.split('\n')[0]);
+    setPhase('error');
+  }
+
+  /** Registry write is display-only: fire-and-forget, never blocks success. */
+  function recordLaunch(p: PairingProof, hash: `0x${string}`) {
+    fetch(`/api/launchers/${launcher.id}/launches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, symbol, token: p.token, txHash: hash }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`registry error (${res.status})`);
+      })
+      .catch(() => onToast(copy.toasts.registryFailed));
+  }
+
+  /**
+   * Wait for the receipt on OUR RPC transport with a bounded first wait; if
+   * it doesn't land in time, show the "still pending" screen (hash + explorer
+   * link) and keep re-checking in the background until it lands, the user
+   * leaves, or we give up quietly (the pending screen stays useful either way).
+   */
+  async function settle(hash: `0x${string}`, seq: number) {
+    let receipt: TransactionReceipt | undefined;
+    for (let attempt = 0; !receipt; attempt++) {
+      try {
+        receipt = await publicClient!.waitForTransactionReceipt({
+          hash,
+          timeout: RECEIPT_TIMEOUT_MS,
+        });
+      } catch {
+        // Timeout, tx not yet visible, or a transient RPC error — all mean
+        // "not confirmed yet", never "failed". Show the honest pending state.
+        if (launchSeq.current !== seq || attempt >= MAX_PENDING_RECHECKS) return;
+        setPhase('pending');
+        await sleep(5_000);
+      }
+      if (launchSeq.current !== seq) return;
+    }
+    if (receipt.status !== 'success') {
+      fail(new Error('the transaction reverted on-chain'));
+      return;
+    }
+    const p = proofFromLogs(receipt.logs);
+    if (!p) {
+      fail(new Error('launch confirmed but no TokenCreated event found'));
+      return;
+    }
+    setProof(p);
+    setPhase('success');
+    recordLaunch(p, hash);
+  }
+
+  /** A tx hash exists (possibly arriving late) — start the receipt watch. */
+  function adopt(hash: `0x${string}`, seq: number) {
+    if (launchSeq.current !== seq) return;
+    setTxHash(hash);
+    setPhase('launching');
+    onToast(copy.toasts.txSubmitted);
+    void settle(hash, seq);
+  }
+
   async function launch() {
+    const seq = ++launchSeq.current;
     setPhase('launching');
     setFormError('');
     setProof(null);
     setTxHash(undefined);
+
+    let write: Promise<`0x${string}`> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       if (!address) throw new Error('connect a wallet first');
+      // Never let the write silently target another chain: the Farcaster host
+      // wallet can drift back to a chain it natively supports.
+      if (walletChainId !== CHAIN_ID) throw new Error(copy.error.wrongChain);
 
       // 1. Config with pairedToken hardcoded to $HOODIE + the canonical tick.
       const config = buildLockedTokenConfig(launcher, {
@@ -113,29 +211,38 @@ export function LaunchToken({
       // 3. Defense in depth: re-verify $HOODIE in the ENCODED calldata.
       assertHoodieInCalldata(tx.args[0]);
 
-      // 4. The user's own wallet signs the direct factory call.
-      const hash = await writeContractAsync({
+      // 4. The user's own wallet signs the direct factory call. chainId makes
+      // wagmi itself refuse a wallet that is on the wrong chain, and the race
+      // bounds a host wallet that never answers eth_sendTransaction.
+      write = writeContractAsync({
         address: tx.address,
         abi: tx.abi,
         functionName: tx.functionName,
         args: tx.args,
         value: tx.value,
+        chainId: CHAIN_ID,
       });
-      setTxHash(hash);
-      onToast(copy.toasts.txSubmitted);
-      const receipt = await publicClient!.waitForTransactionReceipt({ hash });
-      const p = proofFromLogs(receipt.logs);
-      if (!p) throw new Error('launch confirmed but no TokenCreated event found');
-      setProof(p);
-      setPhase('success');
-
-      // Record in the registry (display-only; failure doesn't affect the launch).
-      fetch(`/api/launchers/${launcher.id}/launches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, symbol, token: p.token, txHash: hash }),
-      }).catch(() => {});
+      const hash = await Promise.race([
+        write,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(WALLET_TIMEOUT), WALLET_RESPONSE_TIMEOUT_MS);
+        }),
+      ]);
+      adopt(hash, seq);
     } catch (e) {
+      if (launchSeq.current !== seq) return;
+      if (e === WALLET_TIMEOUT) {
+        // No hash, no broadcast — distinct from an on-chain failure. If the
+        // host wallet answers late, pick the launch back up automatically.
+        setErrorKind('walletTimeout');
+        setErrorDetail('');
+        setPhase('error');
+        write?.then(
+          (hash) => adopt(hash, seq),
+          () => {}
+        );
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       if (/user rejected|denied|user cancelled/i.test(msg)) {
         // The user just backed out of the signature — keep it light.
@@ -143,9 +250,9 @@ export function LaunchToken({
         setPhase('form');
         return;
       }
-      setIsPairingError(/hoodie|pair/i.test(msg));
-      setErrorDetail(msg.split('\n')[0]);
-      setPhase('error');
+      fail(e);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -167,6 +274,7 @@ export function LaunchToken({
   }
 
   function resetForAnother() {
+    launchSeq.current++; // stop any background receipt watch
     setName('');
     setSymbol('');
     setImage('');
@@ -187,7 +295,57 @@ export function LaunchToken({
         <p className="muted" style={{ marginTop: 8 }}>
           {txHash ? copy.launching.status : 'waiting for your signature…'}
         </p>
+        {txHash && (
+          <a
+            className="mono"
+            style={{ marginTop: 10 }}
+            href={`${EXPLORER_URL}/tx/${txHash}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {copy.launching.viewTx}
+          </a>
+        )}
       </div>
+    );
+  }
+
+  /* ---------- still pending (bounded wait ran out) ---------- */
+  if (phase === 'pending' && txHash) {
+    return (
+      <>
+        <div className="center" style={{ flex: 1 }}>
+          <Image
+            src="/brand/yo-dawg-transparent.png"
+            alt="Yo Dawg mascot"
+            width={140}
+            height={140}
+            className="mascot"
+          />
+          <h1 className="meme-caption" style={{ fontSize: 22 }}>
+            {copy.pending.title}
+          </h1>
+          <p className="meme-sub">{copy.pending.body}</p>
+          <div className="card" style={{ width: '100%', textAlign: 'left', marginTop: 14 }}>
+            <div className="muted">{copy.pending.txLabel}</div>
+            <b style={{ fontSize: 13 }} className="mono">
+              <a href={`${EXPLORER_URL}/tx/${txHash}`} target="_blank" rel="noreferrer">
+                {txHash}
+              </a>
+            </b>
+            <div className="hint" style={{ marginTop: 6 }}>{copy.pending.hint}</div>
+          </div>
+        </div>
+        <button
+          className="btn"
+          onClick={() => {
+            launchSeq.current++;
+            onDone();
+          }}
+        >
+          {copy.pending.dismiss}
+        </button>
+      </>
     );
   }
 
@@ -248,6 +406,18 @@ export function LaunchToken({
 
   /* ---------- error (screen 8) ---------- */
   if (phase === 'error') {
+    const title =
+      errorKind === 'pairing'
+        ? copy.error.title
+        : errorKind === 'walletTimeout'
+          ? copy.error.walletTimeoutTitle
+          : copy.error.genericTitle;
+    const body =
+      errorKind === 'pairing'
+        ? copy.error.pairingBody
+        : errorKind === 'walletTimeout'
+          ? copy.error.walletTimeoutBody
+          : copy.error.genericBody;
     return (
       <>
         <div className="center" style={{ flex: 1 }}>
@@ -259,13 +429,20 @@ export function LaunchToken({
             className="mascot"
           />
           <h1 className="meme-caption" style={{ fontSize: 22 }}>
-            {isPairingError ? copy.error.title : copy.error.genericTitle}
+            {title}
           </h1>
-          <p className="meme-sub">{isPairingError ? copy.error.pairingBody : copy.error.genericBody}</p>
-          <p className="error-code">{isPairingError ? copy.error.pairingCode : `error: ${errorDetail}`}</p>
+          <p className="meme-sub">{body}</p>
+          {errorKind === 'pairing' && <p className="error-code">{copy.error.pairingCode}</p>}
+          {errorKind === 'generic' && <p className="error-code">error: {errorDetail}</p>}
         </div>
-        <button className="btn" onClick={() => setPhase('form')}>
-          {isPairingError ? copy.error.button : copy.error.genericButton}
+        <button
+          className="btn"
+          onClick={() => {
+            launchSeq.current++; // cancel any late wallet-response rescue
+            setPhase('form');
+          }}
+        >
+          {errorKind === 'pairing' ? copy.error.button : copy.error.genericButton}
         </button>
       </>
     );
@@ -280,7 +457,31 @@ export function LaunchToken({
       <h1 className="meme-caption" style={{ fontSize: 19 }}>
         {copy.launch.title}
       </h1>
-      <p className="meme-sub">via “{launcher.name}”</p>
+      <p className="meme-sub">
+        via “{launcher.name}”
+        {launcher.creatorUsername ? (
+          <>
+            {' '}
+            <a
+              className="creator-link"
+              href={`https://farcaster.xyz/${launcher.creatorUsername}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {launcher.creatorPfpUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={launcher.creatorPfpUrl} alt="" width={20} height={20} className="creator-pfp" />
+              )}
+              {copy.home.creator(`@${launcher.creatorUsername}`)}
+            </a>
+          </>
+        ) : (
+          <span className="muted">
+            {' '}
+            {copy.home.creator(`${launcher.feeRecipient.slice(0, 6)}…${launcher.feeRecipient.slice(-4)}`)}
+          </span>
+        )}
+      </p>
 
       <div className="row">
         <div className="field grow">

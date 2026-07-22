@@ -197,13 +197,19 @@ export function ChainGate({ onToast }: { onToast: (msg: string) => void }) {
 }
 
 /** Slim connected header: logo left, address chip + disconnect right. */
-export function WalletHeader() {
+export function WalletHeader({ onHome }: { onHome?: () => void }) {
   const { address } = useAccount();
   const { disconnect } = useDisconnect();
 
   return (
     <div className="logo" style={{ justifyContent: 'space-between' }}>
-      <b>YO DAWG</b>
+      {onHome ? (
+        <button type="button" className="logo-home" onClick={onHome} aria-label="back to home">
+          <b>YO DAWG</b>
+        </button>
+      ) : (
+        <b>YO DAWG</b>
+      )}
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span
           className="mono"

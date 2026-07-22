@@ -20,7 +20,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let body: { name?: unknown; feeRecipient?: unknown; lpRewardBps?: unknown };
+  let body: {
+    name?: unknown;
+    feeRecipient?: unknown;
+    lpRewardBps?: unknown;
+    creatorFid?: unknown;
+    creatorUsername?: unknown;
+    creatorPfpUrl?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -44,6 +51,42 @@ export async function POST(request: Request) {
     );
   }
 
+  // Optional Farcaster creator identity (present only when created from the
+  // mini app; the plain web and the CLI never send these).
+  let creatorFid: number | undefined;
+  if (body.creatorFid !== undefined) {
+    const fid = Number(body.creatorFid);
+    if (!Number.isInteger(fid) || fid <= 0) {
+      return NextResponse.json({ error: 'creatorFid must be a positive integer' }, { status: 400 });
+    }
+    creatorFid = fid;
+  }
+  let creatorUsername: string | undefined;
+  if (body.creatorUsername !== undefined) {
+    if (typeof body.creatorUsername !== 'string') {
+      return NextResponse.json({ error: 'creatorUsername must be a string' }, { status: 400 });
+    }
+    const username = body.creatorUsername.trim().replace(/^@/, '');
+    if (!username || username.length > 32) {
+      return NextResponse.json(
+        { error: 'creatorUsername must be 1-32 characters' },
+        { status: 400 }
+      );
+    }
+    creatorUsername = username;
+  }
+  let creatorPfpUrl: string | undefined;
+  if (body.creatorPfpUrl !== undefined) {
+    const pfpUrl = typeof body.creatorPfpUrl === 'string' ? body.creatorPfpUrl.trim() : '';
+    if (!/^https?:\/\//.test(pfpUrl) || pfpUrl.length > 512) {
+      return NextResponse.json(
+        { error: 'creatorPfpUrl must be an http(s) URL of at most 512 characters' },
+        { status: 400 }
+      );
+    }
+    creatorPfpUrl = pfpUrl;
+  }
+
   const launchers = await loadRegistry();
   const id = slugify(name);
   if (!id) return NextResponse.json({ error: 'name needs at least one letter or number' }, { status: 400 });
@@ -56,6 +99,9 @@ export async function POST(request: Request) {
     name,
     feeRecipient: feeRecipient as `0x${string}`,
     lpRewardBps,
+    ...(creatorFid !== undefined && { creatorFid }),
+    ...(creatorUsername !== undefined && { creatorUsername }),
+    ...(creatorPfpUrl !== undefined && { creatorPfpUrl }),
     pairedToken: HOODIE_ADDRESS,
     createdAt: new Date().toISOString(),
     launches: [],

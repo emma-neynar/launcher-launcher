@@ -107,6 +107,18 @@ main {
   text-shadow: 1px 1px 0 #000;
 }
 
+/* Logo-as-button (header home link): strip button chrome, keep the neon <b>. */
+.logo-home {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
 .muted {
   font-size: 11px;
   color: #333;
@@ -208,6 +220,32 @@ a {
 
 .card.clickable {
   cursor: pointer;
+}
+
+/* Creator identity line on a launcher card: tiny round pfp + @username. */
+.creator {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.creator-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.creator-link:hover {
+  text-decoration: underline;
+}
+
+.creator-pfp {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  object-fit: cover;
 }
 
 .card.clickable:hover,

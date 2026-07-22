@@ -79,7 +79,7 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
 
   return (
     <main>
-      <WalletHeader />
+      <WalletHeader onHome={() => setScreen('home')} />
 
       {active === 'home' && (
         <>
