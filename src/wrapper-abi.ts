@@ -18,9 +18,12 @@ export const launcherLauncherAbi = [
   },
   {
     type: 'function',
-    name: 'allLaunchers',
+    name: 'launchersRange',
     stateMutability: 'view',
-    inputs: [],
+    inputs: [
+      { name: 'start', type: 'uint256' },
+      { name: 'count', type: 'uint256' },
+    ],
     outputs: [
       {
         name: 'list',
@@ -74,12 +77,13 @@ export const launcherAbi = [
         type: 'tuple',
         components: [
           // NOTE: no pairedToken field exists — locked to $HOODIE in the contract.
+          // NOTE: no tokenAdmin field either — the caller (msg.sender) is always
+          // the token admin / creator.
           { name: 'name', type: 'string' },
           { name: 'symbol', type: 'string' },
           { name: 'image', type: 'string' },
           { name: 'metadata', type: 'string' },
           { name: 'context', type: 'string' },
-          { name: 'tokenAdmin', type: 'address' },
           { name: 'startingTick', type: 'int24' },
           { name: 'clankerFeeBps', type: 'uint24' },
           { name: 'pairedFeeBps', type: 'uint24' },
@@ -93,7 +97,17 @@ export const launcherAbi = [
   { type: 'function', name: 'feeRecipient', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'lpRewardBps', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint16' }] },
   { type: 'function', name: 'launchCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'tokens', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] },
+  {
+    type: 'function',
+    name: 'tokensRange',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'start', type: 'uint256' },
+      { name: 'count', type: 'uint256' },
+    ],
+    outputs: [{ type: 'address[]' }],
+  },
+  { type: 'function', name: 'tokenAt', stateMutability: 'view', inputs: [{ name: 'index', type: 'uint256' }], outputs: [{ type: 'address' }] },
   {
     type: 'event',
     name: 'TokenLaunched',

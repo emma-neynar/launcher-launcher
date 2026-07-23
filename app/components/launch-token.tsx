@@ -199,11 +199,19 @@ export function LaunchToken({
   /**
    * The wallet never answered, but the tx may have mined anyway. One bounded
    * scan of recent factory TokenCreated logs for a deploy whose tokenAdmin is
-   * the connected wallet. Exactly one match = the launch landed: adopt it.
-   * None or several = we can't attribute anything safely; report false and
-   * let the caller show the ghost error.
+   * the connected wallet — tightened (finding A-03) so a stranger's (or an
+   * older own) Clanker launch can never be adopted: a candidate must ALSO be
+   * $HOODIE-paired and match the deploy we actually attempted, preferably by
+   * the SDK-predicted token address (CREATE2, known before the wallet was
+   * asked to sign) and otherwise by exact token name + symbol. Exactly one
+   * match = the launch landed: adopt it. None or several = we can't
+   * attribute anything safely; report false and let the caller show the
+   * ghost error.
    */
-  async function recoverFromSilentWallet(seq: number): Promise<boolean> {
+  async function recoverFromSilentWallet(
+    seq: number,
+    expected: { token?: `0x${string}`; name: string; symbol: string }
+  ): Promise<boolean> {
     if (!address || !publicClient) return false;
     try {
       const latest = await publicClient.getBlockNumber();
@@ -214,15 +222,20 @@ export function LaunchToken({
         fromBlock: latest > RECOVERY_SCAN_BLOCKS ? latest - RECOVERY_SCAN_BLOCKS : 0n,
         toBlock: latest,
       });
-      if (launchSeq.current !== seq || logs.length !== 1) return false;
-      const { args: eventArgs, transactionHash } = logs[0];
-      const { tokenAddress, pairedToken, poolId } = eventArgs;
-      if (!tokenAddress || !pairedToken || !poolId) return false;
+      const candidates = logs.filter(({ args: a }) => {
+        if (!a.tokenAddress || !a.pairedToken || !a.poolId) return false;
+        if (a.pairedToken.toLowerCase() !== HOODIE_ADDRESS.toLowerCase()) return false;
+        return expected.token
+          ? a.tokenAddress.toLowerCase() === expected.token.toLowerCase()
+          : a.tokenName === expected.name && a.tokenSymbol === expected.symbol;
+      });
+      if (launchSeq.current !== seq || candidates.length !== 1) return false;
+      const { args: eventArgs, transactionHash } = candidates[0];
       const p: PairingProof = {
-        token: tokenAddress,
-        pairedToken,
-        poolId,
-        isHoodie: pairedToken.toLowerCase() === HOODIE_ADDRESS.toLowerCase(),
+        token: eventArgs.tokenAddress!,
+        pairedToken: eventArgs.pairedToken!,
+        poolId: eventArgs.poolId!,
+        isHoodie: true,
       };
       setTxHash(transactionHash);
       setProof(p);
@@ -253,6 +266,10 @@ export function LaunchToken({
 
     let write: Promise<`0x${string}`> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // The CREATE2 token address the SDK predicts for this exact deploy —
+    // retained before the wallet is asked to sign so silent-wallet recovery
+    // can demand it (finding A-03).
+    let expectedToken: `0x${string}` | undefined;
     try {
       if (!address) throw new Error('connect a wallet first');
       // Never let the write silently target another chain: the Farcaster host
@@ -271,6 +288,7 @@ export function LaunchToken({
       // 2. SDK encodes the raw factory deployToken() call (read-only).
       const clanker = new Clanker({ publicClient: publicClient! });
       const tx = await clanker.getDeployTransaction(config);
+      expectedToken = tx.expectedAddress;
 
       // 3. Defense in depth: re-verify $HOODIE in the ENCODED calldata.
       assertHoodieInCalldata(tx.args[0]);
@@ -299,7 +317,11 @@ export function LaunchToken({
         // No hash — but the host wallet has been seen broadcasting without
         // ever resolving. One bounded log scan before we call it ghosted.
         setRecovering(true);
-        const rescued = await recoverFromSilentWallet(seq);
+        const rescued = await recoverFromSilentWallet(seq, {
+          token: expectedToken,
+          name,
+          symbol,
+        });
         setRecovering(false);
         if (rescued || launchSeq.current !== seq) return;
         setErrorKind('walletTimeout');

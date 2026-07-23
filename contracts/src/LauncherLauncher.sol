@@ -68,10 +68,16 @@ contract LauncherLauncher {
         return _launchers[index];
     }
 
-    function allLaunchers() external view returns (LauncherInfo[] memory list) {
-        list = new LauncherInfo[](_launchers.length);
-        for (uint256 i = 0; i < _launchers.length; i++) {
-            list[i] = infoFor[_launchers[i]];
+    /// @notice Paginated read of launcher registry entries. `start` past the
+    /// end returns an empty array; `count` is clamped to the remaining items.
+    function launchersRange(uint256 start, uint256 count) external view returns (LauncherInfo[] memory page) {
+        uint256 len = _launchers.length;
+        if (start >= len) return new LauncherInfo[](0);
+        uint256 end = start + count;
+        if (end > len) end = len;
+        page = new LauncherInfo[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            page[i - start] = infoFor[_launchers[i]];
         }
     }
 

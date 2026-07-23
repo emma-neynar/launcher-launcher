@@ -151,7 +151,6 @@ contract FeePathForkTest is Test {
                 image: "",
                 metadata: "",
                 context: '{"interface":"fee path fork test"}',
-                tokenAdmin: user,
                 startingTick: 0,
                 clankerFeeBps: 100, // 1% each side
                 pairedFeeBps: 100
@@ -214,7 +213,6 @@ contract FeePathForkTest is Test {
                 image: "",
                 metadata: "",
                 context: "",
-                tokenAdmin: user,
                 startingTick: 0,
                 clankerFeeBps: 100,
                 pairedFeeBps: 100

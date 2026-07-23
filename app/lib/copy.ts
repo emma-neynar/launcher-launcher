@@ -73,6 +73,9 @@ export const copy = {
     cutHint: (max: number) => `0–${max}%. the only knob.`,
     feeRecipientNote: (addr: string) => `pays out to ${addr}`,
     button: 'make it so',
+    // Shown while the wallet's free personal_sign prompt is up — the server
+    // only registers launchers whose feeRecipient signed the config.
+    signing: "sign to prove it's you…",
     successToast: 'launcher launched. very meta. 🟢',
   },
 

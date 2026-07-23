@@ -48,7 +48,6 @@ contract LauncherForkTest is Test {
                 image: "",
                 metadata: "",
                 context: '{"interface":"Launcher Launcher fork test"}',
-                tokenAdmin: user,
                 startingTick: tick,
                 clankerFeeBps: fee,
                 pairedFeeBps: fee
@@ -117,7 +116,6 @@ contract LauncherForkTest is Test {
                 image: "",
                 metadata: "",
                 context: "",
-                tokenAdmin: user,
                 startingTick: -230401,
                 clankerFeeBps: 100,
                 pairedFeeBps: 100

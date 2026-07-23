@@ -31,7 +31,6 @@ contract DemoFlow is Script {
                 image: "",
                 metadata: '{"description":"fork demo token"}',
                 context: '{"interface":"Launcher Launcher fork demo"}',
-                tokenAdmin: me,
                 startingTick: 0, // falls back to DEFAULT_STARTING_TICK (-27800)
                 clankerFeeBps: 100,
                 pairedFeeBps: 100

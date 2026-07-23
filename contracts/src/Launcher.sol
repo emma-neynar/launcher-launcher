@@ -39,6 +39,13 @@ contract Launcher {
     address public immutable clankerHook; // static-fee hook v2
     address public immutable clankerMevModule;
 
+    /// @dev Address of the implementation contract itself. EIP-1167 clones
+    /// forward via delegatecall, so inside a clone `address(this)` is the clone
+    /// address while `_self` (read from the shared bytecode) is still the
+    /// implementation address — letting launch() reject direct calls on the
+    /// implementation.
+    address private immutable _self = address(this);
+
     // Per-clone state (set once via initialize, guarded).
     bool public initialized;
     string public launcherName;
@@ -50,12 +57,14 @@ contract Launcher {
 
     struct LaunchParams {
         // NOTE: there is deliberately NO pairedToken field here.
+        // NOTE: there is also NO tokenAdmin field — the caller (msg.sender) is
+        // always the token admin / creator, so creator status cannot be
+        // attributed to an address that never signed.
         string name;
         string symbol;
         string image;
         string metadata; // JSON string, may be empty
         string context; // JSON string, may be empty
-        address tokenAdmin; // token creator: admin + majority reward recipient
         int24 startingTick; // 0 = DEFAULT_STARTING_TICK; must be a multiple of TICK_SPACING
         uint24 clankerFeeBps; // LP fee on the new token side, in bps (<= 1000)
         uint24 pairedFeeBps; // LP fee on the $HOODIE side, in bps (<= 1000)
@@ -94,6 +103,7 @@ contract Launcher {
     error LpRewardTooHigh();
     error FeeTooHigh();
     error TickNotAligned();
+    error NotClone();
 
     constructor(address factory_, address locker_, address hook_, address mevModule_) {
         if (factory_ == address(0) || locker_ == address(0) || hook_ == address(0) || mevModule_ == address(0)) {
@@ -117,37 +127,48 @@ contract Launcher {
     }
 
     /// @notice Launch a token via the deployed Clanker v4 factory, force-paired with $HOODIE.
+    /// @dev The caller (msg.sender) is always the token admin and creator-reward
+    /// recipient. Only callable on clones, never on the implementation itself.
     function launch(LaunchParams calldata p) external returns (address token) {
-        if (p.tokenAdmin == address(0)) revert ZeroAddress();
+        if (address(this) == _self) revert NotClone();
         if (p.clankerFeeBps > MAX_FEE_BPS || p.pairedFeeBps > MAX_FEE_BPS) revert FeeTooHigh();
 
         int24 startingTick = p.startingTick == 0 ? DEFAULT_STARTING_TICK : p.startingTick;
         if (startingTick % TICK_SPACING != 0) revert TickNotAligned();
 
-        token = clankerFactory.deployToken(_buildConfig(p, startingTick));
+        token = clankerFactory.deployToken(_buildConfig(p, msg.sender, startingTick));
         _tokens.push(token);
         launchCount += 1;
 
-        emit TokenLaunched(token, p.tokenAdmin, p.name, p.symbol, HOODIE, startingTick);
-    }
-
-    function tokens() external view returns (address[] memory) {
-        return _tokens;
+        emit TokenLaunched(token, msg.sender, p.name, p.symbol, HOODIE, startingTick);
     }
 
     function tokenAt(uint256 index) external view returns (address) {
         return _tokens[index];
     }
 
-    function _buildConfig(LaunchParams calldata p, int24 startingTick)
+    /// @notice Paginated read of launched tokens. `start` past the end returns
+    /// an empty array; `count` is clamped to the remaining items.
+    function tokensRange(uint256 start, uint256 count) external view returns (address[] memory page) {
+        uint256 len = _tokens.length;
+        if (start >= len) return new address[](0);
+        uint256 end = start + count;
+        if (end > len) end = len;
+        page = new address[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            page[i - start] = _tokens[i];
+        }
+    }
+
+    function _buildConfig(LaunchParams calldata p, address tokenAdmin, int24 startingTick)
         internal
         returns (IClanker.DeploymentConfig memory cfg)
     {
         // Unique CREATE2 salt per launch (factory salts with keccak256(tokenAdmin, salt)).
-        bytes32 salt = keccak256(abi.encode(block.chainid, address(this), _saltNonce++, p.tokenAdmin));
+        bytes32 salt = keccak256(abi.encode(block.chainid, address(this), _saltNonce++, tokenAdmin));
 
         cfg.tokenConfig = IClanker.TokenConfig({
-            tokenAdmin: p.tokenAdmin,
+            tokenAdmin: tokenAdmin,
             name: p.name,
             symbol: p.symbol,
             salt: salt,
@@ -169,7 +190,7 @@ contract Launcher {
             )
         });
 
-        cfg.lockerConfig = _buildLockerConfig(p.tokenAdmin, startingTick);
+        cfg.lockerConfig = _buildLockerConfig(tokenAdmin, startingTick);
         cfg.mevModuleConfig = IClanker.MevModuleConfig({
             mevModule: clankerMevModule,
             // SDK defaults: 66.6777% -> 4.1673% decaying over 15s.

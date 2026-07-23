@@ -74,7 +74,7 @@ Output includes: `pairedToken` = $HOODIE (`0xC72c01AAB5f5678dc1d6f5C6d2B417d91D4
 
 Kept in the repo, fully tested, **not on the go-live path**. Deploying it is only needed if you want the pairing rule enforced by bytecode instead of at the app/CLI choke point.
 
-**1. `LauncherLauncher`** (`contracts/src/LauncherLauncher.sol`) — deploys one canonical `Launcher` implementation in its constructor, then `createLauncher(name, feeRecipient, lpRewardBps)` hands out EIP-1167 minimal-proxy clones and keeps an on-chain registry (`allLaunchers()`, `launcherCount()`, `LauncherCreated` event).
+**1. `LauncherLauncher`** (`contracts/src/LauncherLauncher.sol`) — deploys one canonical `Launcher` implementation in its constructor, then `createLauncher(name, feeRecipient, lpRewardBps)` hands out EIP-1167 minimal-proxy clones and keeps an on-chain registry (`launchersRange(start, count)`, `launcherCount()`, `LauncherCreated` event).
 
 **2. `Launcher`** (`contracts/src/Launcher.sol`) — `launch(LaunchParams)` builds the Clanker v4 `deployToken()` call (selector `0xdf40224a`) and calls the **already-deployed** factory at `0xD3f2cC1731b7Fd17f28798835C2E02f0a1839A94`. The wrapper never deploys, upgrades, or administers any Clanker contract — it is strictly a caller. Note: the wrapper caps `lpRewardBps` at 5000 (50%); the off-chain model allows up to 8000. The wrapper's fee mechanics are confirmed correct and unchanged.
 
@@ -162,7 +162,7 @@ The CLI enforces the rule at the same choke point (`src/hoodie-lock.ts`): hardco
 | Registry API (`app/api/launchers`) | registry store only (JSON file or Upstash Redis) — nothing on-chain, no funds |
 | Clanker factory `deployToken` (mini app) | **write** — signed by the end user's own wallet |
 | Clanker factory `deployToken` (CLI) | **write** — gated behind `--live` + typed `LAUNCH` |
-| Optional wrapper: `allLaunchers`, `launcherCount`, `HOODIE`, `tokens`, event decoding | read-only |
+| Optional wrapper: `launchersRange`, `launcherCount`, `HOODIE`, `tokensRange`, event decoding | read-only |
 | Optional wrapper: `createLauncher`, `launch` | **write** — trustless mode only, user-signed |
 | `scripts/deploy-live.sh` (deploys the optional wrapper) | **write** — trustless mode only, gated behind typed `DEPLOY` + dev-wallet key |
 
