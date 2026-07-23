@@ -15,6 +15,7 @@ import { copy } from '../lib/copy';
 import { type FarcasterIdentity, getFarcasterIdentity } from '../lib/farcaster-identity';
 import { APP_URL } from '../lib/wagmi';
 import { FeeSplit } from './fee-split';
+import { IdentityLink } from './identity-link';
 import { LockedPair } from './locked-pair';
 import { type PairingProof, proofFromLogs } from './verify-pairing';
 
@@ -673,48 +674,5 @@ export function LaunchToken({
         </div>
       )}
     </>
-  );
-}
-
-/**
- * pfp + @username linking to farcaster, falling back to a shortened address —
- * the identity chip used by the form header (launcher creator) and the
- * success card ("launched by" / "via"). `wrap` lets callers run the handle
- * through a copy helper like copy.home.creator ("by @…").
- */
-function IdentityLink({
-  username,
-  pfpUrl,
-  fallbackAddress,
-  wrap = (who) => who,
-}: {
-  username?: string;
-  pfpUrl?: string;
-  fallbackAddress?: string;
-  wrap?: (who: string) => string;
-}) {
-  if (!username) {
-    if (!fallbackAddress) return null;
-    return (
-      <span className="muted">
-        {wrap(`${fallbackAddress.slice(0, 6)}…${fallbackAddress.slice(-4)}`)}
-      </span>
-    );
-  }
-  return (
-    <a
-      className="creator-link"
-      href={`https://farcaster.xyz/${username}`}
-      target="_blank"
-      rel="noreferrer"
-    >
-      {pfpUrl && (
-        // Plain <img>: pfpUrl is an arbitrary remote host, which next/image
-        // would reject without a remotePatterns entry.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={pfpUrl} alt="" width={20} height={20} className="creator-pfp" />
-      )}
-      {wrap(`@${username}`)}
-    </a>
   );
 }

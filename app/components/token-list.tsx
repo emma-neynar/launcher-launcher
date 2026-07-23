@@ -11,9 +11,11 @@ import { useLaunchers } from './launcher-list';
  * on-chain truth for any row is one click away on the explorer.
  */
 export function TokenList({
+  onSelectToken,
   onSelectLauncher,
   onBack,
 }: {
+  onSelectToken: (launch: Launch, launcher: Launcher) => void;
   onSelectLauncher: (l: Launcher) => void;
   onBack: () => void;
 }) {
@@ -41,7 +43,11 @@ export function TokenList({
         </div>
       )}
       {rows.map(({ launch, launcher }) => (
-        <div key={launch.token} className="card">
+        <div
+          key={launch.token}
+          className="card clickable"
+          onClick={() => onSelectToken(launch, launcher)}
+        >
           <b style={{ fontSize: 13 }}>
             {launch.name} <span className="mono">${launch.symbol}</span>
           </b>
@@ -52,6 +58,7 @@ export function TokenList({
               href={`${EXPLORER_URL}/token/${launch.token}`}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
             >
               {shortAddress(launch.token)}
             </a>
@@ -63,6 +70,7 @@ export function TokenList({
                 href={`https://farcaster.xyz/${launch.launcherUsername}`}
                 target="_blank"
                 rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
               >
                 {launch.launcherPfpUrl && (
                   // Plain <img>: pfpUrl is an arbitrary remote host, which
@@ -83,7 +91,13 @@ export function TokenList({
             )}
           </div>
           <div style={{ marginTop: 4 }}>
-            <button className="linkish" onClick={() => onSelectLauncher(launcher)}>
+            <button
+              className="linkish"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectLauncher(launcher);
+              }}
+            >
               {copy.tokens.via(launcher.name)} →
             </button>
           </div>

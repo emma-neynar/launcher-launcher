@@ -65,6 +65,19 @@ export const copy = {
     via: (launcherName: string) => `via ${launcherName}`,
   },
 
+  // The token detail screen — tap any card on "tokens launched". Card labels
+  // reuse copy.success (token / launched by / via / paired); these are the
+  // detail-only strings.
+  token: {
+    dateLabel: 'launched',
+    pairedValue: '🔒 $HOODIE — always is, dawg',
+    viewTx: 'view transaction →',
+    launchButton: 'launch one w/ this launcher →',
+    shareButton: 'share this one →',
+    shareCast: (ticker: string, url: string) =>
+      `yo dawg, ${ticker} came out of a launcher launcher — paired to $HOODIE on robinhood chain. launch yours → ${url}`,
+  },
+
   create: {
     title: 'spin up a launcher',
     nameLabel: 'name your launcher',
@@ -147,7 +160,7 @@ export const copy = {
     viaLabel: 'via',
     pairedLabel: 'paired',
     pairedValue: '🔒 $HOODIE (verified on-chain)',
-    button: 'share the bit →',
+    button: 'share your token →',
     shareCast: (url: string) =>
       `yo dawg. i put a launcher launcher in my launcher and launched a token paired to $HOODIE — immutable, proven on-chain, on robinhood chain. put a launcher in your launcher → ${url}`,
   },
@@ -187,7 +200,7 @@ export const copy = {
     title: 'how it works',
     sections: {
       bit: {
-        h: 'the bit',
+        h: 'the idea',
         body: 'you spin up a launcher. other people launch tokens through it. you skim a cut of the fees. yes, it’s a launcher launcher. recursion is the point.',
       },
       rule: {

@@ -4,17 +4,27 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { CHAIN_ID } from '@/src/hoodie';
-import type { Launcher } from '@/src/registry';
+import type { Launch, Launcher } from '@/src/registry';
 import { CreateLauncher } from './components/create-launcher';
 import { Info } from './components/info';
 import { LaunchToken } from './components/launch-token';
 import { LauncherList, splitLaunchers, useLaunchers } from './components/launcher-list';
+import { TokenDetail } from './components/token-detail';
 import { TokenList } from './components/token-list';
 import { VerifyPairing } from './components/verify-pairing';
 import { ChainGate, ConnectHero, WalletHeader } from './components/wallet';
 import { copy } from './lib/copy';
 
-type Screen = 'home' | 'mine' | 'others' | 'tokens' | 'create' | 'launch' | 'verify' | 'info';
+type Screen =
+  | 'home'
+  | 'mine'
+  | 'others'
+  | 'tokens'
+  | 'token'
+  | 'create'
+  | 'launch'
+  | 'verify'
+  | 'info';
 
 /**
  * The app shell as a small state machine:
@@ -34,6 +44,10 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
   const [mounted, setMounted] = useState(false);
   const [screen, setScreen] = useState<Screen>('home');
   const [selected, setSelected] = useState<Launcher | null>(null);
+  const [selectedToken, setSelectedToken] = useState<{
+    launch: Launch;
+    launcher: Launcher;
+  } | null>(null);
   const [toast, setToast] = useState('');
 
   useEffect(() => setMounted(true), []);
@@ -70,7 +84,10 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
     );
   }
 
-  const active: Screen = screen === 'launch' && !selected ? 'home' : screen;
+  const active: Screen =
+    (screen === 'launch' && !selected) || (screen === 'token' && !selectedToken)
+      ? 'home'
+      : screen;
   const { mine, others } = splitLaunchers(launchers, address);
   const counts = isLoading
     ? undefined
@@ -151,7 +168,24 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
       )}
 
       {active === 'tokens' && (
-        <TokenList onSelectLauncher={selectLauncher} onBack={() => setScreen('home')} />
+        <TokenList
+          onSelectToken={(launch, launcher) => {
+            setSelectedToken({ launch, launcher });
+            setScreen('token');
+          }}
+          onSelectLauncher={selectLauncher}
+          onBack={() => setScreen('home')}
+        />
+      )}
+
+      {active === 'token' && selectedToken && (
+        <TokenDetail
+          launch={selectedToken.launch}
+          launcher={selectedToken.launcher}
+          onSelectLauncher={selectLauncher}
+          onBack={() => setScreen('tokens')}
+          onToast={setToast}
+        />
       )}
 
       {active === 'create' && (
