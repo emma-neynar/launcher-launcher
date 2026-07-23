@@ -14,6 +14,10 @@
   --font-impact: Impact, 'Anton', 'Haettenschweiler', 'Arial Narrow Bold', 'Arial Black',
     sans-serif;
   --font-comic: 'Comic Sans MS', 'Comic Neue', cursive;
+  /* The single content column. Defaults are the mini-app layout; the desktop
+   * media query at the bottom of this file widens them. */
+  --col-max: 480px;
+  --col-pad: 15px;
 }
 
 * {
@@ -38,9 +42,9 @@ body {
 }
 
 main {
-  max-width: 480px;
+  max-width: var(--col-max);
   margin: 0 auto;
-  padding: 16px 15px 72px;
+  padding: 16px var(--col-pad) 72px;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -367,9 +371,9 @@ a {
 .hero-content {
   position: relative;
   z-index: 1;
-  max-width: 480px;
+  max-width: var(--col-max);
   margin: 0 auto;
-  padding: 24px 15px;
+  padding: 24px var(--col-pad);
   height: 100vh;
   height: 100dvh;
   display: flex;
@@ -560,9 +564,9 @@ a {
   position: relative;
   flex: 1 1 auto;
   min-height: 240px;
-  max-height: calc(min(100vw, 480px) * 746 / 1024);
-  width: calc(100% + 30px);
-  margin: -20px -15px 0; /* hood tip tucks behind the big caption */
+  max-height: calc(min(100vw, var(--col-max)) * 746 / 1024);
+  width: calc(100% + var(--col-pad) * 2);
+  margin: -20px calc(-1 * var(--col-pad)) 0; /* hood tip tucks behind the big caption */
   overflow: hidden;
 }
 
@@ -596,9 +600,9 @@ a {
 }
 
 .home-footer-inner {
-  max-width: 480px;
+  max-width: var(--col-max);
   margin: 0 auto;
-  padding: 0 15px;
+  padding: 0 var(--col-pad);
 }
 
 .home-footer-links {
@@ -606,6 +610,12 @@ a {
   justify-content: center;
   gap: 34px;
   margin-bottom: 16px;
+}
+
+/* List screens: plain block wrapper on phones (renders identically to no
+ * wrapper); becomes a 2-up grid on desktop via the media query below. */
+.card-grid {
+  display: block;
 }
 
 details.advanced summary {
@@ -622,4 +632,236 @@ details.advanced summary {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   color: #333;
+}
+
+/* --------------------------------------------------------------------------
+ * Desktop (>= 700px): same app, scaled up. Everything below this line is
+ * desktop-only — the mini app / phone rendering (< 700px) is untouched.
+ * The !important rules exist to outrank the per-screen inline font sizes
+ * (style={{ fontSize: N }}) that were tuned for the 480px column; they only
+ * apply inside this media query.
+ * ------------------------------------------------------------------------ */
+
+@media (min-width: 700px) {
+  :root {
+    /* Wider column, still narrower than the mascot PNG's 1024px so the
+     * artwork never renders above its natural size. */
+    --col-max: 720px;
+    --col-pad: 24px;
+  }
+
+  body {
+    font-size: 15px;
+  }
+
+  /* ---- type scale ---- */
+
+  /* Page titles (create / launch / verify / info / detail / result screens)
+   * carry inline sizes of 19–22px; one desktop size keeps them coherent. */
+  h1.meme-caption:not(.home-caption) {
+    font-size: 30px !important;
+  }
+
+  /* Section captions (list headers, hero bottom line, launching lines). */
+  p.meme-caption:not(.home-caption-sub) {
+    font-size: 22px !important;
+  }
+
+  /* Connect hero gets the biggest treatment — it owns the whole viewport. */
+  .hero-content h1.meme-caption {
+    font-size: 40px !important;
+  }
+
+  .hero-content p.meme-caption {
+    font-size: 24px !important;
+  }
+
+  .meme-sub {
+    font-size: 14px;
+    padding: 4px 8px;
+  }
+
+  .logo {
+    font-size: 17px;
+  }
+
+  .logo b {
+    font-size: 22px;
+  }
+
+  .muted {
+    font-size: 13px;
+  }
+
+  .mono {
+    font-size: 12px;
+  }
+
+  .hint {
+    font-size: 12px;
+  }
+
+  .linkish {
+    font-size: 13px;
+  }
+
+  .linkish.light {
+    font-size: 16px;
+  }
+
+  .error-code {
+    font-size: 12px;
+  }
+
+  .tooltip-box {
+    font-size: 13px;
+  }
+
+  /* ---- buttons ---- */
+
+  .btn {
+    font-size: 19px;
+    padding: 15px;
+    border-radius: 16px;
+    box-shadow: 5px 5px 0 var(--ink);
+  }
+
+  .btn.sm {
+    padding: 11px;
+    font-size: 16px;
+  }
+
+  .btn.big {
+    padding: 19px;
+    font-size: 30px;
+    letter-spacing: 2px;
+  }
+
+  .btn.round {
+    border-radius: 999px;
+    padding: 17px 15px;
+  }
+
+  /* ---- cards, fields, forms ---- */
+
+  .card {
+    padding: 18px;
+    border-radius: 14px;
+    box-shadow: 4px 4px 0 var(--ink);
+    margin-bottom: 14px;
+  }
+
+  /* Card titles / value lines carry an inline 13px tuned for the phone
+   * column; keep them ahead of the 15px desktop body text. */
+  .card b {
+    font-size: 16px !important;
+  }
+
+  .field {
+    margin: 12px 0;
+  }
+
+  .field label {
+    font-size: 14px;
+  }
+
+  .input {
+    padding: 12px 14px;
+    font-size: 15px;
+  }
+
+  .locked {
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .warnbar {
+    font-size: 13px;
+    padding: 11px;
+  }
+
+  .pill {
+    font-size: 13px;
+    padding: 7px 12px;
+  }
+
+  .creator {
+    font-size: 13px;
+  }
+
+  details.advanced summary {
+    font-size: 13px;
+  }
+
+  /* ---- list screens: 2-up sticker grid ---- */
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .card-grid > .card {
+    margin-bottom: 0;
+  }
+
+  /* ---- home hero composition ---- */
+
+  .home-caption {
+    font-size: clamp(38px, 5.5vw, 54px);
+    -webkit-text-stroke: 3px #000;
+    text-shadow: 3px 3px 0 #000, -1px -1px 0 #000;
+  }
+
+  .home-caption-sub {
+    font-size: 24px;
+    bottom: 14px;
+  }
+
+  .home-mascot-wrap {
+    min-height: 300px;
+  }
+
+  /* ---- home footer ---- */
+
+  .home-footer {
+    padding: 26px 0 38px;
+  }
+
+  .home-footer-links {
+    gap: 48px;
+    margin-bottom: 20px;
+  }
+
+  /* ---- modal, stamp, spinner, toast ---- */
+
+  .modal {
+    max-width: 480px;
+    padding: 20px;
+  }
+
+  .modal-title {
+    font-size: 26px;
+  }
+
+  /* Confirm-modal body copy carries an inline 12px tuned for phones. */
+  .modal p {
+    font-size: 14px !important;
+  }
+
+  .stamp {
+    font-size: 26px;
+    padding: 8px 16px;
+  }
+
+  .spin {
+    width: 72px;
+    height: 72px;
+    border-width: 8px;
+  }
+
+  .toast {
+    font-size: 15px;
+    padding: 12px 18px;
+  }
 }

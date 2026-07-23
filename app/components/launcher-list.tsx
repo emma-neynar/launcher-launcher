@@ -84,48 +84,50 @@ export function LauncherList({
           </div>
         </div>
       )}
-      {shown.map((l) => (
-        <div key={l.id} className="card clickable" onClick={() => onSelect(l)}>
-          <b style={{ fontSize: 13 }}>{l.name}</b>
-          <div className="creator">
-            {l.creatorUsername ? (
-              <a
-                className="creator-link"
-                href={`https://farcaster.xyz/${l.creatorUsername}`}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
+      <div className="card-grid">
+        {shown.map((l) => (
+          <div key={l.id} className="card clickable" onClick={() => onSelect(l)}>
+            <b style={{ fontSize: 13 }}>{l.name}</b>
+            <div className="creator">
+              {l.creatorUsername ? (
+                <a
+                  className="creator-link"
+                  href={`https://farcaster.xyz/${l.creatorUsername}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {l.creatorPfpUrl && (
+                    // Plain <img>: pfpUrl is an arbitrary remote host, which
+                    // next/image would reject without a remotePatterns entry.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={l.creatorPfpUrl} alt="" width={20} height={20} className="creator-pfp" />
+                  )}
+                  {copy.home.creator(`@${l.creatorUsername}`)}
+                </a>
+              ) : (
+                <span className="muted">{copy.home.creator(shortAddress(l.feeRecipient))}</span>
+              )}
+            </div>
+            <div className="muted">{copy.home.meta(l.launches.length)}</div>
+            <div className="muted">{feeSplitCompact(l.lpRewardBps)}</div>
+            <div style={{ marginTop: 8 }}>
+              <span className="pill">{copy.home.pill}</span>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <button
+                className="linkish"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyShare(l.id);
+                }}
               >
-                {l.creatorPfpUrl && (
-                  // Plain <img>: pfpUrl is an arbitrary remote host, which
-                  // next/image would reject without a remotePatterns entry.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={l.creatorPfpUrl} alt="" width={20} height={20} className="creator-pfp" />
-                )}
-                {copy.home.creator(`@${l.creatorUsername}`)}
-              </a>
-            ) : (
-              <span className="muted">{copy.home.creator(shortAddress(l.feeRecipient))}</span>
-            )}
+                {copy.home.share(`${APP_URL}/l/${l.id}`)}
+              </button>
+            </div>
           </div>
-          <div className="muted">{copy.home.meta(l.launches.length)}</div>
-          <div className="muted">{feeSplitCompact(l.lpRewardBps)}</div>
-          <div style={{ marginTop: 8 }}>
-            <span className="pill">{copy.home.pill}</span>
-          </div>
-          <div style={{ marginTop: 6 }}>
-            <button
-              className="linkish"
-              onClick={(e) => {
-                e.stopPropagation();
-                copyShare(l.id);
-              }}
-            >
-              {copy.home.share(`${APP_URL}/l/${l.id}`)}
-            </button>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

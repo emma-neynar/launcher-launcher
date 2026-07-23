@@ -42,67 +42,69 @@ export function TokenList({
           </div>
         </div>
       )}
-      {rows.map(({ launch, launcher }) => (
-        <div
-          key={launch.token}
-          className="card clickable"
-          onClick={() => onSelectToken(launch, launcher)}
-        >
-          <b style={{ fontSize: 13 }}>
-            {launch.name} <span className="mono">${launch.symbol}</span>
-          </b>
-          <div style={{ marginTop: 2 }}>
-            <a
-              className="mono"
-              style={{ fontSize: 12 }}
-              href={`${EXPLORER_URL}/token/${launch.token}`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {shortAddress(launch.token)}
-            </a>
-          </div>
-          <div className="creator">
-            {launch.launcherUsername ? (
+      <div className="card-grid">
+        {rows.map(({ launch, launcher }) => (
+          <div
+            key={launch.token}
+            className="card clickable"
+            onClick={() => onSelectToken(launch, launcher)}
+          >
+            <b style={{ fontSize: 13 }}>
+              {launch.name} <span className="mono">${launch.symbol}</span>
+            </b>
+            <div style={{ marginTop: 2 }}>
               <a
-                className="creator-link"
-                href={`https://farcaster.xyz/${launch.launcherUsername}`}
+                className="mono"
+                style={{ fontSize: 12 }}
+                href={`${EXPLORER_URL}/token/${launch.token}`}
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
               >
-                {launch.launcherPfpUrl && (
-                  // Plain <img>: pfpUrl is an arbitrary remote host, which
-                  // next/image would reject without a remotePatterns entry.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={launch.launcherPfpUrl}
-                    alt=""
-                    width={20}
-                    height={20}
-                    className="creator-pfp"
-                  />
-                )}
-                {copy.tokens.launchedBy(`@${launch.launcherUsername}`)}
+                {shortAddress(launch.token)}
               </a>
-            ) : (
-              <span className="muted">{copy.tokens.anon}</span>
-            )}
+            </div>
+            <div className="creator">
+              {launch.launcherUsername ? (
+                <a
+                  className="creator-link"
+                  href={`https://farcaster.xyz/${launch.launcherUsername}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {launch.launcherPfpUrl && (
+                    // Plain <img>: pfpUrl is an arbitrary remote host, which
+                    // next/image would reject without a remotePatterns entry.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={launch.launcherPfpUrl}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="creator-pfp"
+                    />
+                  )}
+                  {copy.tokens.launchedBy(`@${launch.launcherUsername}`)}
+                </a>
+              ) : (
+                <span className="muted">{copy.tokens.anon}</span>
+              )}
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <button
+                className="linkish"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectLauncher(launcher);
+                }}
+              >
+                {copy.tokens.via(launcher.name)} →
+              </button>
+            </div>
           </div>
-          <div style={{ marginTop: 4 }}>
-            <button
-              className="linkish"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectLauncher(launcher);
-              }}
-            >
-              {copy.tokens.via(launcher.name)} →
-            </button>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
