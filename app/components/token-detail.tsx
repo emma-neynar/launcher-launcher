@@ -3,6 +3,7 @@
 import { EXPLORER_URL } from '@/src/constants';
 import type { Launch, Launcher } from '@/src/registry';
 import { copy } from '../lib/copy';
+import { shareText } from '../lib/share';
 import { APP_URL } from '../lib/wagmi';
 import { IdentityLink } from './identity-link';
 
@@ -26,19 +27,7 @@ export function TokenDetail({
 }) {
   async function share() {
     const url = `${APP_URL}/l/${launcher.id}`;
-    const text = copy.token.shareCast(`$${launch.symbol}`, url);
-    try {
-      const { sdk } = await import('@farcaster/miniapp-sdk');
-      await sdk.actions.composeCast({ text, embeds: [url] });
-    } catch {
-      // Outside a Farcaster host: fall back to the clipboard.
-      try {
-        await navigator.clipboard.writeText(text);
-        onToast(copy.toasts.copied);
-      } catch {
-        /* clipboard unavailable */
-      }
-    }
+    await shareText(copy.token.shareCast(`$${launch.symbol}`, url), url, onToast);
   }
 
   return (

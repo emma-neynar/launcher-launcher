@@ -14,18 +14,9 @@ export type FarcasterIdentity = {
 };
 
 export async function getFarcasterIdentity(): Promise<FarcasterIdentity> {
-  if (
-    window === window.parent &&
-    !(window as { ReactNativeWebView?: unknown }).ReactNativeWebView
-  ) {
-    return {};
-  }
+  if (!maybeInHost()) return {};
   try {
-    const { sdk } = await import('@farcaster/miniapp-sdk');
-    const ctx = await Promise.race([
-      sdk.context,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2_000)),
-    ]);
+    const ctx = await hostContext();
     const user = ctx?.user;
     if (!user || !Number.isInteger(user.fid) || user.fid <= 0) return {};
     return {
@@ -36,4 +27,35 @@ export async function getFarcasterIdentity(): Promise<FarcasterIdentity> {
   } catch {
     return {};
   }
+}
+
+/**
+ * Whether we're actually inside a Farcaster host. Needed before calling host
+ * actions like composeCast: outside a host they don't reject, they HANG —
+ * which read as "the share button does nothing" on the website. The plain
+ * top-level-tab case resolves synchronously false, so a click handler keeps
+ * its user-gesture activation for navigator.share fallbacks.
+ */
+export async function isInFarcasterHost(): Promise<boolean> {
+  if (!maybeInHost()) return false;
+  try {
+    return !!(await hostContext());
+  } catch {
+    return false;
+  }
+}
+
+function maybeInHost(): boolean {
+  return (
+    window !== window.parent ||
+    !!(window as { ReactNativeWebView?: unknown }).ReactNativeWebView
+  );
+}
+
+async function hostContext() {
+  const { sdk } = await import('@farcaster/miniapp-sdk');
+  return Promise.race([
+    sdk.context,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2_000)),
+  ]);
 }

@@ -23,6 +23,7 @@ import { CANONICAL_OPENING_TICK, marketCapForTick, marketCapUsdForTick } from '@
 import { clankerTokenCreatedEventAbi } from '@/src/wrapper-abi';
 import { copy } from '../lib/copy';
 import { type FarcasterIdentity, getFarcasterIdentity } from '../lib/farcaster-identity';
+import { shareText } from '../lib/share';
 import { isProviderSideError } from '../lib/provider-error';
 import { APP_URL } from '../lib/wagmi';
 import { FeeSplit } from './fee-split';
@@ -458,43 +459,14 @@ export function LaunchToken({
   }
 
   async function share() {
-    await shareText(copy.success.shareCast(`${APP_URL}/l/${launcher.id}`));
+    const url = `${APP_URL}/l/${launcher.id}`;
+    await shareText(copy.success.shareCast(url), url, onToast);
   }
 
   /** Share THIS LAUNCHER's deep link — the distribution loop for operators. */
   async function shareLauncher() {
-    await shareText(copy.launch.shareCast(launcher.name, `${APP_URL}/l/${launcher.id}`));
-  }
-
-  /**
-   * Best share surface available: Farcaster cast composer (the deep link
-   * renders as a launchable mini app card) → the OS share sheet (mobile
-   * browsers) → clipboard.
-   */
-  async function shareText(text: string) {
     const url = `${APP_URL}/l/${launcher.id}`;
-    try {
-      const { sdk } = await import('@farcaster/miniapp-sdk');
-      await sdk.actions.composeCast({ text, embeds: [url] });
-      return;
-    } catch {
-      /* outside a Farcaster host */
-    }
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ text });
-        return;
-      } catch {
-        // Cancelled or unsupported payload — don't ALSO hit the clipboard.
-        return;
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      onToast(copy.toasts.copied);
-    } catch {
-      /* clipboard unavailable */
-    }
+    await shareText(copy.launch.shareCast(launcher.name, url), url, onToast);
   }
 
   function resetForAnother() {
