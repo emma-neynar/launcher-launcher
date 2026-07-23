@@ -178,6 +178,12 @@ export const copy = {
     walletTimeoutTitle: 'your wallet ghosted, dawg',
     walletTimeoutBody:
       'we never got a transaction hash back from your wallet, so nothing was launched. if this keeps happening in farcaster, open the app in a browser with metamask or rabby.',
+    // The wallet's provider errored mid-send (e.g. "Unknown provider RPC
+    // error" from the farcaster host wallet on 4663) — shown only AFTER the
+    // recovery scan confirmed nothing matching this launch hit the chain.
+    flakyWalletTitle: 'your wallet flaked, dawg',
+    flakyWalletBody:
+      'the farcaster wallet choked talking to robinhood chain. we checked the chain — nothing launched. run it back, or open the app in a browser with metamask or rabby.',
     // Thrown pre-send when the connected wallet isn't on chain 4663.
     wrongChain: 'your wallet drifted off robinhood chain (4663) — reconnect and run it back.',
     // Pre-flight balance check: launching costs ~4M gas, and the host wallet

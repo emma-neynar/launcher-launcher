@@ -7,7 +7,11 @@ import {
   BaseError,
   ContractFunctionRevertedError,
   formatEther,
+  InternalRpcError,
+  ProviderRpcError,
   type TransactionReceipt,
+  UnknownRpcError,
+  UserRejectedRequestError,
 } from 'viem';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { CHAIN_ID, CLANKER_FACTORY, EXPLORER_URL, HOODIE_ADDRESS } from '@/src/hoodie';
@@ -29,7 +33,7 @@ import { LockedPair } from './locked-pair';
 import { type PairingProof, proofFromLogs } from './verify-pairing';
 
 type Phase = 'form' | 'confirm' | 'launching' | 'pending' | 'success' | 'error';
-type ErrorKind = 'pairing' | 'walletTimeout' | 'generic';
+type ErrorKind = 'pairing' | 'walletTimeout' | 'flakyWallet' | 'generic';
 
 /**
  * How long the wallet gets to come back with a tx hash after the user
@@ -91,6 +95,35 @@ function extractErrorDetail(e: unknown): string {
   }
   const msg = e instanceof Error ? e.message : String(e);
   return msg.split('\n')[0];
+}
+
+/**
+ * Did the wallet call fail on the PROVIDER side (as opposed to the user
+ * declining or the contract reverting)? With the Farcaster host wallet on
+ * chain 4663 a provider error like "Unknown provider RPC error" does NOT
+ * prove nothing was broadcast — the same wallet has been seen sending
+ * successfully while erroring/ghosting on eth_sendTransaction. viem wraps the
+ * provider error, so walk the cause chain (same approach as
+ * extractErrorDetail). Deliberately narrow:
+ *   - UserRejectedRequestError (EIP-1193 code 4001) is NEVER a flake — the
+ *     caller must keep the quiet back-to-form path.
+ *   - a decodable ContractFunctionRevertedError is a real revert, not a flake.
+ *   - matches: UnknownRpcError, InternalRpcError (-32603), or a
+ *     ProviderRpcError whose code isn't one of the recognized EIP-1193 codes.
+ */
+function isProviderSideError(e: unknown): boolean {
+  if (!(e instanceof BaseError)) return false;
+  if (e.walk((err) => err instanceof UserRejectedRequestError)) return false;
+  if (e.walk((err) => err instanceof ContractFunctionRevertedError)) return false;
+  const KNOWN_EIP1193_CODES = [4001, 4100, 4200, 4900, 4901, 4902];
+  return Boolean(
+    e.walk(
+      (err) =>
+        err instanceof UnknownRpcError ||
+        err instanceof InternalRpcError ||
+        (err instanceof ProviderRpcError && !KNOWN_EIP1193_CODES.includes(err.code))
+    )
+  );
 }
 
 /**
@@ -415,10 +448,33 @@ export function LaunchToken({
         return;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      if (/user rejected|denied|user cancelled/i.test(msg)) {
+      if (
+        /user rejected|denied|user cancelled/i.test(msg) ||
+        (e instanceof BaseError && e.walk((err) => err instanceof UserRejectedRequestError))
+      ) {
         // The user just backed out of the signature — keep it light.
         setFormError('signature declined — no launch happened.');
         setPhase('form');
+        return;
+      }
+      // The wallet was actually asked to sign (`write` exists) and its
+      // PROVIDER errored — with the host wallet that doesn't prove nothing
+      // was sent (seen 2026-07-23, wallet 0x6108…: "Unknown provider RPC
+      // error"). Run the SAME bounded rescue as the silent-wallet path
+      // before showing an error; it only ever adopts an exact match on the
+      // SDK-predicted token address (or exact name+symbol).
+      if (write && isProviderSideError(e)) {
+        setRecovering(true);
+        const rescued = await recoverFromSilentWallet(seq, {
+          token: expectedToken,
+          name,
+          symbol,
+        });
+        setRecovering(false);
+        if (rescued || launchSeq.current !== seq) return;
+        setErrorKind('flakyWallet');
+        setErrorDetail(extractErrorDetail(e));
+        setPhase('error');
         return;
       }
       fail(e);
@@ -614,13 +670,17 @@ export function LaunchToken({
         ? copy.error.title
         : errorKind === 'walletTimeout'
           ? copy.error.walletTimeoutTitle
-          : copy.error.genericTitle;
+          : errorKind === 'flakyWallet'
+            ? copy.error.flakyWalletTitle
+            : copy.error.genericTitle;
     const body =
       errorKind === 'pairing'
         ? copy.error.pairingBody
         : errorKind === 'walletTimeout'
           ? copy.error.walletTimeoutBody
-          : copy.error.genericBody;
+          : errorKind === 'flakyWallet'
+            ? copy.error.flakyWalletBody
+            : copy.error.genericBody;
     return (
       <>
         <div className="center" style={{ flex: 1 }}>
@@ -636,7 +696,9 @@ export function LaunchToken({
           </h1>
           <p className="meme-sub">{body}</p>
           {errorKind === 'pairing' && <p className="error-code">{copy.error.pairingCode}</p>}
-          {errorKind === 'generic' && <p className="error-code">error: {errorDetail}</p>}
+          {(errorKind === 'generic' || errorKind === 'flakyWallet') && (
+            <p className="error-code">error: {errorDetail}</p>
+          )}
         </div>
         <button
           className="btn"
