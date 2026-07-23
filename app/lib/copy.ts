@@ -240,6 +240,11 @@ export const copy = {
         h: 'wallets + chain',
         body: 'everything runs on robinhood chain (4663), signed by your own wallet — this app never holds keys or funds. metamask or rabby in a browser works best; the farcaster in-app wallet can’t reach 4663 yet, so inside farcaster you’ll get a link to open in your browser instead.',
       },
+      claiming: {
+        h: 'claiming your fees',
+        body: (feeLocker: string) =>
+          `fees pile up in clanker’s fee locker as people trade — paid in the token AND $HOODIE. token creators and launcher operators claim the exact same way: go to clanker.world, connect the wallet that earns (your creator wallet, or the operator wallet a launcher pays out to), find the token, and hit claim. no UI needed either — call claim(yourAddress, tokenAddress) on the fee locker (${feeLocker}) straight from the explorer. anyone can push the button, but the money only ever goes to the wallet on file. no deadline, claim whenever.`,
+      },
     },
   },
 
