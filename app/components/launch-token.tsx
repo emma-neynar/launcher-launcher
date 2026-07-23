@@ -5,12 +5,14 @@ import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TransactionReceipt } from 'viem';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
-import { CHAIN_ID, EXPLORER_URL } from '@/src/hoodie';
+import { CHAIN_ID, CLANKER_FACTORY, EXPLORER_URL, HOODIE_ADDRESS } from '@/src/hoodie';
 import { assertHoodieInCalldata, buildLockedTokenConfig } from '@/src/hoodie-lock';
 import { fetchHoodiePriceUsd, type HoodiePrice } from '@/src/hoodie-price';
 import type { Launcher } from '@/src/registry';
 import { CANONICAL_OPENING_TICK, marketCapForTick, marketCapUsdForTick } from '@/src/tick';
+import { clankerTokenCreatedEventAbi } from '@/src/wrapper-abi';
 import { copy } from '../lib/copy';
+import { getFarcasterIdentity } from '../lib/farcaster-identity';
 import { APP_URL } from '../lib/wagmi';
 import { FeeSplit } from './fee-split';
 import { LockedPair } from './locked-pair';
@@ -34,6 +36,14 @@ const WALLET_RESPONSE_TIMEOUT_MS = 120_000;
 const RECEIPT_TIMEOUT_MS = 90_000;
 /** While on the pending screen, keep re-checking this many times (~30 min). */
 const MAX_PENDING_RECHECKS = 20;
+/**
+ * When the wallet ghosts (no hash after the bounded wait), one last check
+ * before the error screen: scan this many recent blocks of factory logs for a
+ * deploy the connected wallet is the tokenAdmin of. The host wallet has been
+ * observed to broadcast successfully and still never resolve
+ * eth_sendTransaction. ~10 minutes at Robinhood Chain's ~100ms block time.
+ */
+const RECOVERY_SCAN_BLOCKS = 6_000n;
 
 const WALLET_TIMEOUT = Symbol('wallet-timeout');
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -80,6 +90,8 @@ export function LaunchToken({
   const [proof, setProof] = useState<PairingProof | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [lineIdx, setLineIdx] = useState(0);
+  // True while the post-ghost log scan runs (changes the launching status line).
+  const [recovering, setRecovering] = useState(false);
 
   // Bumped whenever the user leaves an in-flight launch (dismiss / retry) so
   // stale background receipt-watchers and late wallet responses become no-ops.
@@ -123,11 +135,24 @@ export function LaunchToken({
 
   /** Registry write is display-only: fire-and-forget, never blocks success. */
   function recordLaunch(p: PairingProof, hash: `0x${string}`) {
-    fetch(`/api/launchers/${launcher.id}/launches`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, symbol, token: p.token, txHash: hash }),
-    })
+    // Same best-effort identity capture as create-launcher: resolves to {}
+    // outside a mini-app host, so the record simply lacks the launcher* fields.
+    getFarcasterIdentity()
+      .then((identity) =>
+        fetch(`/api/launchers/${launcher.id}/launches`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            symbol,
+            token: p.token,
+            txHash: hash,
+            ...(identity.fid !== undefined && { launcherFid: identity.fid }),
+            ...(identity.username && { launcherUsername: identity.username }),
+            ...(identity.pfpUrl && { launcherPfpUrl: identity.pfpUrl }),
+          }),
+        })
+      )
       .then((res) => {
         if (!res.ok) throw new Error(`registry error (${res.status})`);
       })
@@ -169,6 +194,45 @@ export function LaunchToken({
     setProof(p);
     setPhase('success');
     recordLaunch(p, hash);
+  }
+
+  /**
+   * The wallet never answered, but the tx may have mined anyway. One bounded
+   * scan of recent factory TokenCreated logs for a deploy whose tokenAdmin is
+   * the connected wallet. Exactly one match = the launch landed: adopt it.
+   * None or several = we can't attribute anything safely; report false and
+   * let the caller show the ghost error.
+   */
+  async function recoverFromSilentWallet(seq: number): Promise<boolean> {
+    if (!address || !publicClient) return false;
+    try {
+      const latest = await publicClient.getBlockNumber();
+      const logs = await publicClient.getLogs({
+        address: CLANKER_FACTORY,
+        event: clankerTokenCreatedEventAbi[0],
+        args: { tokenAdmin: address },
+        fromBlock: latest > RECOVERY_SCAN_BLOCKS ? latest - RECOVERY_SCAN_BLOCKS : 0n,
+        toBlock: latest,
+      });
+      if (launchSeq.current !== seq || logs.length !== 1) return false;
+      const { args: eventArgs, transactionHash } = logs[0];
+      const { tokenAddress, pairedToken, poolId } = eventArgs;
+      if (!tokenAddress || !pairedToken || !poolId) return false;
+      const p: PairingProof = {
+        token: tokenAddress,
+        pairedToken,
+        poolId,
+        isHoodie: pairedToken.toLowerCase() === HOODIE_ADDRESS.toLowerCase(),
+      };
+      setTxHash(transactionHash);
+      setProof(p);
+      setPhase('success');
+      recordLaunch(p, transactionHash);
+      return true;
+    } catch {
+      // RPC hiccup during the rescue — fall back to the honest ghost error.
+      return false;
+    }
   }
 
   /** A tx hash exists (possibly arriving late) — start the receipt watch. */
@@ -232,11 +296,16 @@ export function LaunchToken({
     } catch (e) {
       if (launchSeq.current !== seq) return;
       if (e === WALLET_TIMEOUT) {
-        // No hash, no broadcast — distinct from an on-chain failure. If the
-        // host wallet answers late, pick the launch back up automatically.
+        // No hash — but the host wallet has been seen broadcasting without
+        // ever resolving. One bounded log scan before we call it ghosted.
+        setRecovering(true);
+        const rescued = await recoverFromSilentWallet(seq);
+        setRecovering(false);
+        if (rescued || launchSeq.current !== seq) return;
         setErrorKind('walletTimeout');
         setErrorDetail('');
         setPhase('error');
+        // If the host wallet answers late, pick the launch back up automatically.
         write?.then(
           (hash) => adopt(hash, seq),
           () => {}
@@ -293,7 +362,11 @@ export function LaunchToken({
           {copy.launching.lines[lineIdx]}
         </p>
         <p className="muted" style={{ marginTop: 8 }}>
-          {txHash ? copy.launching.status : 'waiting for your signature…'}
+          {txHash
+            ? copy.launching.status
+            : recovering
+              ? copy.launching.recovering
+              : 'waiting for your signature…'}
         </p>
         {txHash && (
           <a

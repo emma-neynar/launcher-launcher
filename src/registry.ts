@@ -27,14 +27,24 @@ export type Launcher = {
   pairedToken: typeof HOODIE_ADDRESS;
   createdAt: string;
   /** Tokens launched through this launcher. */
-  launches: {
-    name: string;
-    symbol: string;
-    token: `0x${string}`;
-    txHash?: `0x${string}`;
-    mode: 'dry-run' | 'live';
-    at: string;
-  }[];
+  launches: Launch[];
+};
+
+export type Launch = {
+  name: string;
+  symbol: string;
+  token: `0x${string}`;
+  txHash?: `0x${string}`;
+  mode: 'dry-run' | 'live';
+  at: string;
+  /**
+   * Farcaster identity of whoever launched the token, captured from the
+   * mini-app sdk.context at launch time. All optional: launches recorded
+   * before this existed (or from the CLI / plain web) simply lack them.
+   */
+  launcherFid?: number;
+  launcherUsername?: string;
+  launcherPfpUrl?: string;
 };
 
 // ---------------------------------------------------------------------------

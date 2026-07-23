@@ -6,6 +6,7 @@ import { useAccount } from 'wagmi';
 import { DEFAULT_LP_REWARD_BPS, MAX_LP_REWARD_BPS, isValidLpRewardBps } from '@/src/fees';
 import type { Launcher } from '@/src/registry';
 import { copy } from '../lib/copy';
+import { getFarcasterIdentity } from '../lib/farcaster-identity';
 import { FeeSplit } from './fee-split';
 
 /**
@@ -39,7 +40,12 @@ export function CreateLauncher({
     setBusy(true);
     setError('');
     try {
-      const creator = await getCreatorIdentity();
+      const identity = await getFarcasterIdentity();
+      const creator = {
+        ...(identity.fid !== undefined && { creatorFid: identity.fid }),
+        ...(identity.username && { creatorUsername: identity.username }),
+        ...(identity.pfpUrl && { creatorPfpUrl: identity.pfpUrl }),
+      };
       const res = await fetch('/api/launchers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,40 +110,4 @@ export function CreateLauncher({
 
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
-}
-
-/**
- * Best-effort Farcaster identity for the launcher card ("made by @…"). Only
- * resolvable inside a mini-app host; sdk.context can hang forever in a plain
- * browser, so (mirroring useIsInMiniApp in wallet.tsx) a top-level tab bails
- * synchronously and anything host-shaped is raced against a 2s timeout.
- * Failure is never an error — the card just falls back to the fee address.
- */
-async function getCreatorIdentity(): Promise<{
-  creatorFid?: number;
-  creatorUsername?: string;
-  creatorPfpUrl?: string;
-}> {
-  if (
-    window === window.parent &&
-    !(window as { ReactNativeWebView?: unknown }).ReactNativeWebView
-  ) {
-    return {};
-  }
-  try {
-    const { sdk } = await import('@farcaster/miniapp-sdk');
-    const ctx = await Promise.race([
-      sdk.context,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2_000)),
-    ]);
-    const user = ctx?.user;
-    if (!user || !Number.isInteger(user.fid) || user.fid <= 0) return {};
-    return {
-      creatorFid: user.fid,
-      ...(user.username && { creatorUsername: user.username }),
-      ...(user.pfpUrl && { creatorPfpUrl: user.pfpUrl }),
-    };
-  } catch {
-    return {};
-  }
 }

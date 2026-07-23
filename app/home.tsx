@@ -9,11 +9,12 @@ import { CreateLauncher } from './components/create-launcher';
 import { Info } from './components/info';
 import { LaunchToken } from './components/launch-token';
 import { LauncherList, splitLaunchers, useLaunchers } from './components/launcher-list';
+import { TokenList } from './components/token-list';
 import { VerifyPairing } from './components/verify-pairing';
 import { ChainGate, ConnectHero, WalletHeader } from './components/wallet';
 import { copy } from './lib/copy';
 
-type Screen = 'home' | 'mine' | 'others' | 'create' | 'launch' | 'verify' | 'info';
+type Screen = 'home' | 'mine' | 'others' | 'tokens' | 'create' | 'launch' | 'verify' | 'info';
 
 /**
  * The app shell as a small state machine:
@@ -71,7 +72,13 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
 
   const active: Screen = screen === 'launch' && !selected ? 'home' : screen;
   const { mine, others } = splitLaunchers(launchers, address);
-  const counts = isLoading ? undefined : { mine: mine.length, others: others.length };
+  const counts = isLoading
+    ? undefined
+    : {
+        mine: mine.length,
+        others: others.length,
+        tokens: launchers.reduce((n, l) => n + l.launches.length, 0),
+      };
   const selectLauncher = (l: Launcher) => {
     setSelected(l);
     setScreen('launch');
@@ -119,8 +126,15 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
               >
                 {copy.home.mineOption(counts?.mine)}
               </button>
-              <button className="btn alt round" onClick={() => setScreen('others')}>
+              <button
+                className="btn alt round"
+                style={{ marginBottom: 12 }}
+                onClick={() => setScreen('others')}
+              >
                 {copy.home.othersOption(counts?.others)}
+              </button>
+              <button className="btn alt round" onClick={() => setScreen('tokens')}>
+                {copy.home.tokensOption(counts?.tokens)}
               </button>
             </div>
           </div>
@@ -134,6 +148,10 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
           onToast={setToast}
           onBack={() => setScreen('home')}
         />
+      )}
+
+      {active === 'tokens' && (
+        <TokenList onSelectLauncher={selectLauncher} onBack={() => setScreen('home')} />
       )}
 
       {active === 'create' && (

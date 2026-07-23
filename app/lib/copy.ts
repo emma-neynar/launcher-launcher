@@ -37,6 +37,7 @@ export const copy = {
     mineOption: (n?: number) => (n === undefined ? 'your launchers' : `your launchers (${n})`),
     othersOption: (n?: number) =>
       n === undefined ? "everyone else's launchers" : `everyone else's launchers (${n})`,
+    tokensOption: (n?: number) => (n === undefined ? 'tokens launched' : `tokens launched (${n})`),
     // List screens.
     header: 'your launchers',
     othersHeader: "everyone else's launchers",
@@ -51,6 +52,17 @@ export const copy = {
     button: '+ make a launcher',
     verifyLink: 'verify a launch →',
     infoLink: 'how it works →',
+  },
+
+  // The cross-launcher "tokens launched" list screen.
+  tokens: {
+    header: 'tokens launched',
+    empty: 'nothing launched yet.\nyour move, dawg.',
+    // Who signed the launch — takes "@username"; anon when the launch predates
+    // identity capture (or came from outside the mini app).
+    launchedBy: (who: string) => `launched by ${who}`,
+    anon: 'launched by anon',
+    via: (launcherName: string) => `via ${launcherName}`,
   },
 
   create: {
@@ -107,6 +119,9 @@ export const copy = {
       'it’s launchers all the way down…',
     ],
     status: 'confirming on robinhood chain…',
+    // Shown while we scan recent factory logs after the wallet went quiet —
+    // the host wallet sometimes broadcasts but never returns the hash.
+    recovering: 'no word from your wallet — checking if it landed anyway…',
     viewTx: 'watch it on the explorer →',
   },
 
