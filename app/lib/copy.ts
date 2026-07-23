@@ -90,6 +90,10 @@ export const copy = {
     // only registers launchers whose feeRecipient signed the config.
     signing: "sign to prove it's you…",
     successToast: 'launcher launched. very meta. 🟢',
+    // Post-create share moment, shown on the new launcher's own screen.
+    createdTitle: 'launcher launched',
+    createdBody: 'this page is yours now. anyone with the link launches through you — you skim the cut.',
+    shareButton: 'share your launcher →',
   },
 
   // Gross fee split — of ALL LP fees a pool earns, wallet-accurate. Clanker's
@@ -115,6 +119,9 @@ export const copy = {
     locked: '🔒 $HOODIE — not a field, dawg.',
     button: 'review the launch →',
     advanced: 'extra details (optional)',
+    share: 'share this launcher →',
+    shareCast: (name: string, url: string) =>
+      `yo dawg — launch your token through “${name}” and it comes out paired with $HOODIE. automatic. proven on-chain. ${url}`,
   },
 
   confirm: {

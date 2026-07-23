@@ -48,6 +48,9 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
     launch: Launch;
     launcher: Launcher;
   } | null>(null);
+  // True only when arriving on the launch screen straight from creating that
+  // launcher — LaunchToken shows the big share-your-launcher moment.
+  const [justCreated, setJustCreated] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => setMounted(true), []);
@@ -98,6 +101,7 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
       };
   const selectLauncher = (l: Launcher) => {
     setSelected(l);
+    setJustCreated(false);
     setScreen('launch');
   };
 
@@ -192,13 +196,19 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
         <CreateLauncher
           onBack={() => setScreen('home')}
           onToast={setToast}
-          onCreated={selectLauncher}
+          onCreated={(l) => {
+            setSelected(l);
+            setJustCreated(true);
+            setScreen('launch');
+          }}
         />
       )}
 
       {active === 'launch' && selected && (
         <LaunchToken
+          key={selected.id}
           launcher={selected}
+          justCreated={justCreated}
           onBack={() => setScreen('home')}
           onToast={setToast}
           onDone={() => setScreen('home')}

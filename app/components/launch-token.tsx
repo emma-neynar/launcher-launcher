@@ -110,11 +110,14 @@ function extractErrorDetail(e: unknown): string {
  */
 export function LaunchToken({
   launcher,
+  justCreated,
   onBack,
   onToast,
   onDone,
 }: {
   launcher: Launcher;
+  /** True when arriving straight from creating this launcher — shows the share moment. */
+  justCreated?: boolean;
   onBack: () => void;
   onToast: (msg: string) => void;
   onDone: () => void;
@@ -142,6 +145,8 @@ export function LaunchToken({
   const [lineIdx, setLineIdx] = useState(0);
   // True while the post-ghost log scan runs (changes the launching status line).
   const [recovering, setRecovering] = useState(false);
+  // The post-create share banner; dismissed once the owner moves on to launching.
+  const [createdBanner, setCreatedBanner] = useState(!!justCreated);
 
   // Bumped whenever the user leaves an in-flight launch (dismiss / retry) so
   // stale background receipt-watchers and late wallet responses become no-ops.
@@ -453,19 +458,42 @@ export function LaunchToken({
   }
 
   async function share() {
+    await shareText(copy.success.shareCast(`${APP_URL}/l/${launcher.id}`));
+  }
+
+  /** Share THIS LAUNCHER's deep link — the distribution loop for operators. */
+  async function shareLauncher() {
+    await shareText(copy.launch.shareCast(launcher.name, `${APP_URL}/l/${launcher.id}`));
+  }
+
+  /**
+   * Best share surface available: Farcaster cast composer (the deep link
+   * renders as a launchable mini app card) → the OS share sheet (mobile
+   * browsers) → clipboard.
+   */
+  async function shareText(text: string) {
     const url = `${APP_URL}/l/${launcher.id}`;
-    const text = copy.success.shareCast(url);
     try {
       const { sdk } = await import('@farcaster/miniapp-sdk');
       await sdk.actions.composeCast({ text, embeds: [url] });
+      return;
     } catch {
-      // Outside a Farcaster host: fall back to the clipboard.
+      /* outside a Farcaster host */
+    }
+    if (typeof navigator.share === 'function') {
       try {
-        await navigator.clipboard.writeText(text);
-        onToast(copy.toasts.copied);
+        await navigator.share({ text });
+        return;
       } catch {
-        /* clipboard unavailable */
+        // Cancelled or unsupported payload — don't ALSO hit the clipboard.
+        return;
       }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      onToast(copy.toasts.copied);
+    } catch {
+      /* clipboard unavailable */
     }
   }
 
@@ -701,6 +729,26 @@ export function LaunchToken({
         />
       </p>
 
+      {createdBanner ? (
+        <div className="card" style={{ textAlign: 'center', marginTop: 12 }}>
+          <div className="stamp" style={{ display: 'inline-block', marginBottom: 8 }}>
+            {copy.create.createdTitle}
+          </div>
+          <p style={{ margin: '0 0 10px' }}>{copy.create.createdBody}</p>
+          <button className="btn neon" onClick={shareLauncher}>
+            {copy.create.shareButton}
+          </button>
+        </div>
+      ) : (
+        <button
+          className="linkish"
+          style={{ display: 'block', margin: '2px auto 0' }}
+          onClick={shareLauncher}
+        >
+          {copy.launch.share}
+        </button>
+      )}
+
       <div className="row">
         <div className="field grow">
           <label>{copy.launch.nameLabel}</label>
@@ -754,7 +802,10 @@ export function LaunchToken({
 
       <button
         className="btn bottom"
-        onClick={() => setPhase('confirm')}
+        onClick={() => {
+          setCreatedBanner(false);
+          setPhase('confirm');
+        }}
         disabled={!name || !symbol || !address}
       >
         {copy.launch.button}
