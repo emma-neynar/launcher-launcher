@@ -3,7 +3,12 @@
 import { Clanker } from 'clanker-sdk/v4';
 import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { TransactionReceipt } from 'viem';
+import {
+  BaseError,
+  ContractFunctionRevertedError,
+  formatEther,
+  type TransactionReceipt,
+} from 'viem';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { CHAIN_ID, CLANKER_FACTORY, EXPLORER_URL, HOODIE_ADDRESS } from '@/src/hoodie';
 import {
@@ -52,6 +57,41 @@ const RECOVERY_SCAN_BLOCKS = 6_000n;
 
 const WALLET_TIMEOUT = Symbol('wallet-timeout');
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** "0.000546 ETH" — enough precision for gas money, no wei noise. */
+const formatEth = (wei: bigint) => `${Number(formatEther(wei)).toPrecision(3)} ETH`;
+
+/**
+ * The one line of an error worth showing. viem's ContractFunctionExecutionError
+ * puts a generic "reverted with the following reason:" on line ONE and the
+ * actual reason/custom error further down the message (and cause chain) — a
+ * first-line truncation hides exactly the part that matters (as shipped, it
+ * hid "gas required exceeds allowance" from a user, 2026-07-23). Walk the
+ * cause chain for the most specific thing we know, translating the two
+ * out-of-gas-money shapes into plain words.
+ */
+function extractErrorDetail(e: unknown): string {
+  // Both shapes of "wallet can't cover gasLimit × maxFeePerGas": sends come
+  // back as a revert whose reason is the node's allowance line, estimates as
+  // an ExecutionRevertedError with the same text in its message.
+  const lowGas = /gas required exceeds allowance|insufficient funds/i;
+  if (e instanceof BaseError) {
+    if (lowGas.test(e.message)) return copy.error.lowGasShort;
+    const revert = e.walk((err) => err instanceof ContractFunctionRevertedError);
+    if (revert instanceof ContractFunctionRevertedError) {
+      // Decoded custom error, e.g. "HookNotEnabled".
+      if (revert.data?.errorName && revert.data.errorName !== 'Error') {
+        const args = (revert.data.args ?? []).map(String).join(', ');
+        return `${revert.data.errorName}(${args})`;
+      }
+      // Error(string) reason — or the raw node message when there's no data.
+      if (revert.reason) return revert.reason;
+    }
+    return e.shortMessage || e.message.split('\n')[0];
+  }
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.split('\n')[0];
+}
 
 /**
  * Screens 5–9: the launch flow. OFF-CHAIN enforcement model (the primary
@@ -142,7 +182,7 @@ export function LaunchToken({
     // literal "pairedToken" — in EVERY failed wallet call, so a text match
     // turns any RPC/wallet error into a false pairing violation.
     setErrorKind(e instanceof HoodiePairingViolation ? 'pairing' : 'generic');
-    setErrorDetail(msg.split('\n')[0]);
+    setErrorDetail(e instanceof HoodiePairingViolation ? msg.split('\n')[0] : extractErrorDetail(e));
     setPhase('error');
   }
 
@@ -306,6 +346,32 @@ export function LaunchToken({
 
       // 3. Defense in depth: re-verify $HOODIE in the ENCODED calldata.
       assertHoodieInCalldata(tx.args[0]);
+
+      // 3.5. Preflight on OUR RPC before the wallet sheet ever opens. The
+      // estimate surfaces any real revert (with a decodable reason) early,
+      // and the balance check catches the sneakiest failure we've shipped:
+      // launching costs ~4M gas, and a node rejects the send when
+      // balance < gasLimit × maxFeePerGas — which the host wallet reports as
+      // an opaque "deployToken reverted" (seen 2026-07-23, wallet 0x6108…).
+      // Same math the wallet uses: ~2% pad on the limit, 1.2× on the base fee.
+      const gas = await publicClient!.estimateContractGas({
+        address: tx.address,
+        abi: tx.abi,
+        functionName: tx.functionName,
+        args: tx.args,
+        value: tx.value,
+        account: address,
+      });
+      const [balance, block] = await Promise.all([
+        publicClient!.getBalance({ address }),
+        publicClient!.getBlock(),
+      ]);
+      if (block.baseFeePerGas) {
+        const needed = ((gas * 102n) / 100n) * ((block.baseFeePerGas * 12n) / 10n);
+        if (balance < needed) {
+          throw new Error(copy.error.lowGas(formatEth(balance), formatEth(needed)));
+        }
+      }
 
       // 4. The user's own wallet signs the direct factory call. chainId makes
       // wagmi itself refuse a wallet that is on the wrong chain, and the race

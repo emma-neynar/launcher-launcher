@@ -36,6 +36,21 @@ export type LaunchRequest = {
 };
 
 /**
+ * A fresh random salt for every launch. Without one (`vanity: false`, no
+ * salt) the SDK encodes the ZERO salt, and the factory's CREATE2 salt is
+ * keccak(tokenAdmin, salt) — fully deterministic. Re-deploying an identical
+ * token config (same admin + name + symbol + image + metadata + context)
+ * then collides with the earlier token and the factory reverts with no
+ * reason data. A unique salt makes every launch deployable, and the SDK's
+ * expectedAddress prediction stays exact because it is computed from this
+ * salt (verified against eth_call simulation).
+ */
+function randomSalt(): `0x${string}` {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
  * Build a ClankerTokenV4 config with the paired token hardcoded to $HOODIE.
  * This is the ONLY place in the repo that constructs a deploy config, and
  * `pool.pairedToken` is written from the frozen constant, never from input.
@@ -93,6 +108,7 @@ export function buildLockedTokenConfig(launcher: Launcher, req: LaunchRequest): 
       ],
     },
     vanity: false,
+    salt: randomSalt(),
   };
 }
 
