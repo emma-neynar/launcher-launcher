@@ -183,7 +183,7 @@ export const copy = {
     // recovery scan confirmed nothing matching this launch hit the chain.
     flakyWalletTitle: 'your wallet flaked, dawg',
     flakyWalletBody:
-      'the farcaster wallet choked talking to robinhood chain. we checked the chain — nothing launched. run it back, or open the app in a browser with metamask or rabby.',
+      "known issue: the farcaster MOBILE wallet can't send on robinhood chain right now. we checked the chain — nothing launched. try farcaster on the web (farcaster.xyz in a browser), or open yodawg.xyz straight in a browser wallet like metamask or rabby.",
     // Thrown pre-send when the connected wallet isn't on chain 4663.
     wrongChain: 'your wallet drifted off robinhood chain (4663) — reconnect and run it back.',
     // Pre-flight balance check: launching costs ~4M gas, and the host wallet

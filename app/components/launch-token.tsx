@@ -7,10 +7,7 @@ import {
   BaseError,
   ContractFunctionRevertedError,
   formatEther,
-  InternalRpcError,
-  ProviderRpcError,
   type TransactionReceipt,
-  UnknownRpcError,
   UserRejectedRequestError,
 } from 'viem';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
@@ -26,6 +23,7 @@ import { CANONICAL_OPENING_TICK, marketCapForTick, marketCapUsdForTick } from '@
 import { clankerTokenCreatedEventAbi } from '@/src/wrapper-abi';
 import { copy } from '../lib/copy';
 import { type FarcasterIdentity, getFarcasterIdentity } from '../lib/farcaster-identity';
+import { isProviderSideError } from '../lib/provider-error';
 import { APP_URL } from '../lib/wagmi';
 import { FeeSplit } from './fee-split';
 import { IdentityLink } from './identity-link';
@@ -95,35 +93,6 @@ function extractErrorDetail(e: unknown): string {
   }
   const msg = e instanceof Error ? e.message : String(e);
   return msg.split('\n')[0];
-}
-
-/**
- * Did the wallet call fail on the PROVIDER side (as opposed to the user
- * declining or the contract reverting)? With the Farcaster host wallet on
- * chain 4663 a provider error like "Unknown provider RPC error" does NOT
- * prove nothing was broadcast — the same wallet has been seen sending
- * successfully while erroring/ghosting on eth_sendTransaction. viem wraps the
- * provider error, so walk the cause chain (same approach as
- * extractErrorDetail). Deliberately narrow:
- *   - UserRejectedRequestError (EIP-1193 code 4001) is NEVER a flake — the
- *     caller must keep the quiet back-to-form path.
- *   - a decodable ContractFunctionRevertedError is a real revert, not a flake.
- *   - matches: UnknownRpcError, InternalRpcError (-32603), or a
- *     ProviderRpcError whose code isn't one of the recognized EIP-1193 codes.
- */
-function isProviderSideError(e: unknown): boolean {
-  if (!(e instanceof BaseError)) return false;
-  if (e.walk((err) => err instanceof UserRejectedRequestError)) return false;
-  if (e.walk((err) => err instanceof ContractFunctionRevertedError)) return false;
-  const KNOWN_EIP1193_CODES = [4001, 4100, 4200, 4900, 4901, 4902];
-  return Boolean(
-    e.walk(
-      (err) =>
-        err instanceof UnknownRpcError ||
-        err instanceof InternalRpcError ||
-        (err instanceof ProviderRpcError && !KNOWN_EIP1193_CODES.includes(err.code))
-    )
-  );
 }
 
 /**
