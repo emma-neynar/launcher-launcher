@@ -4,12 +4,13 @@ import { isInFarcasterHost } from './farcaster-identity';
 import { copy } from './copy';
 
 /**
- * Share `text` (with `url` as the mini app embed) on the best surface
- * available: Farcaster cast composer → OS share sheet → clipboard.
+ * Share on the best surface available. Inside a Farcaster host: the cast
+ * composer, prefilled with `text` and the deep link as a mini app embed.
+ * Anywhere else (the website): copy the LINK itself to the clipboard — a
+ * plain URL pastes cleanly into wherever the conversation is happening.
  *
- * The composer is only attempted INSIDE a Farcaster host — outside one,
- * composeCast hangs instead of rejecting, which read as "the share button
- * does nothing" on the website.
+ * The composer is only attempted INSIDE a host — outside one, composeCast
+ * hangs instead of rejecting, which read as "the share button does nothing".
  */
 export async function shareText(text: string, url: string, onToast: (msg: string) => void) {
   if (await isInFarcasterHost()) {
@@ -18,22 +19,12 @@ export async function shareText(text: string, url: string, onToast: (msg: string
       await sdk.actions.composeCast({ text, embeds: [url] });
       return;
     } catch {
-      /* host refused the composer — fall through to the web paths */
-    }
-  }
-  if (typeof navigator.share === 'function') {
-    try {
-      await navigator.share({ text });
-      return;
-    } catch (e) {
-      // User closed the share sheet: done. Anything else (blocked,
-      // unsupported payload): keep going to the clipboard.
-      if (e instanceof DOMException && e.name === 'AbortError') return;
+      /* host refused the composer — fall through to the clipboard */
     }
   }
   try {
-    await navigator.clipboard.writeText(text);
-    onToast(copy.toasts.copied);
+    await navigator.clipboard.writeText(url);
+    onToast(copy.toasts.linkCopied);
   } catch {
     /* clipboard unavailable */
   }

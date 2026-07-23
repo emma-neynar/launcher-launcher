@@ -87,6 +87,10 @@ export function TokenList({
                   )}
                   {copy.tokens.launchedBy(`@${launch.launcherUsername}`)}
                 </a>
+              ) : launch.launcherAddress ? (
+                <span className="muted">
+                  {copy.tokens.launchedBy(shortAddress(launch.launcherAddress))}
+                </span>
               ) : (
                 <span className="muted">{copy.tokens.anon}</span>
               )}

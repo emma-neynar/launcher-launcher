@@ -246,6 +246,7 @@ export const copy = {
   toasts: {
     txSubmitted: 'sent it. waiting on the chain…',
     copied: 'copied, dawg',
+    linkCopied: 'link copied — paste it anywhere, dawg',
     chainSwitched: 'welcome to robinhood chain, dawg',
     registryFailed: "token's live on-chain, but the registry didn't hear about it. still counts.",
   },
