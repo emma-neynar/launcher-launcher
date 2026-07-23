@@ -90,7 +90,7 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
 
       {active === 'home' && (
         <>
-          <button className="btn" style={{ marginTop: 10 }} onClick={() => setScreen('create')}>
+          <button className="btn big" style={{ marginTop: 10 }} onClick={() => setScreen('create')}>
             {copy.home.button}
           </button>
 

@@ -185,6 +185,13 @@ a {
   font-size: 14px;
 }
 
+/* Oversized variant for the home-screen "MAKE A LAUNCHER" CTA. */
+.btn.big {
+  padding: 15px;
+  font-size: 23px;
+  letter-spacing: 1.5px;
+}
+
 .btn.bottom {
   margin-top: auto;
 }
