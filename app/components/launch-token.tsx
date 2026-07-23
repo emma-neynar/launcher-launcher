@@ -6,7 +6,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TransactionReceipt } from 'viem';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { CHAIN_ID, CLANKER_FACTORY, EXPLORER_URL, HOODIE_ADDRESS } from '@/src/hoodie';
-import { assertHoodieInCalldata, buildLockedTokenConfig } from '@/src/hoodie-lock';
+import {
+  assertHoodieInCalldata,
+  buildLockedTokenConfig,
+  HoodiePairingViolation,
+} from '@/src/hoodie-lock';
 import { fetchHoodiePriceUsd, type HoodiePrice } from '@/src/hoodie-price';
 import type { Launcher } from '@/src/registry';
 import { CANONICAL_OPENING_TICK, marketCapForTick, marketCapUsdForTick } from '@/src/tick';
@@ -132,7 +136,12 @@ export function LaunchToken({
 
   function fail(e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    setErrorKind(/hoodie|pair/i.test(msg) ? 'pairing' : 'generic');
+    // ONLY a real HoodiePairingViolation (thrown by buildLockedTokenConfig /
+    // assertHoodieInCalldata) gets the pairing screen. Never match on message
+    // text: viem embeds the deployToken ABI signature — which contains the
+    // literal "pairedToken" — in EVERY failed wallet call, so a text match
+    // turns any RPC/wallet error into a false pairing violation.
+    setErrorKind(e instanceof HoodiePairingViolation ? 'pairing' : 'generic');
     setErrorDetail(msg.split('\n')[0]);
     setPhase('error');
   }

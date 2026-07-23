@@ -93,10 +93,18 @@ function useIsInMiniApp() {
 export function ConnectHero() {
   const { connect, connectors, isPending } = useConnect();
   const inMiniApp = useIsInMiniApp();
-  // Hide nothing until detection resolves; only filter once we know we're on
-  // the open web (inMiniApp === false), where the Farcaster connector can't
-  // connect to anything.
-  const visible = connectors.filter((c) => c.id !== 'farcaster' || inMiniApp !== false);
+  // Inside a mini app: ONLY our explicit farcasterMiniApp connector. The
+  // Farcaster host ALSO announces its wallet as an EIP-6963 injected provider
+  // ("Farcaster Wallet"), which wagmi auto-discovers — without this filter the
+  // user sees two indistinguishable farcaster buttons (plus injected/
+  // walletconnect dead ends). Scoped to the mini-app context so EIP-6963
+  // discovery keeps working for MetaMask & co. in a plain browser.
+  // On the open web (inMiniApp === false) hide the Farcaster connector, which
+  // can't connect to anything there. Hide nothing until detection resolves.
+  const visible =
+    inMiniApp === true
+      ? connectors.filter((c) => c.id === 'farcaster')
+      : connectors.filter((c) => c.id !== 'farcaster' || inMiniApp !== false);
 
   return (
     <div className="hero">
