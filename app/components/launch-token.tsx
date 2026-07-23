@@ -12,7 +12,7 @@ import type { Launcher } from '@/src/registry';
 import { CANONICAL_OPENING_TICK, marketCapForTick, marketCapUsdForTick } from '@/src/tick';
 import { clankerTokenCreatedEventAbi } from '@/src/wrapper-abi';
 import { copy } from '../lib/copy';
-import { getFarcasterIdentity } from '../lib/farcaster-identity';
+import { type FarcasterIdentity, getFarcasterIdentity } from '../lib/farcaster-identity';
 import { APP_URL } from '../lib/wagmi';
 import { FeeSplit } from './fee-split';
 import { LockedPair } from './locked-pair';
@@ -89,6 +89,9 @@ export function LaunchToken({
   const [errorDetail, setErrorDetail] = useState('');
   const [proof, setProof] = useState<PairingProof | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  // Who signed the launch, resolved once by recordLaunch — the success screen
+  // shows it, falling back to the connected address when it's empty.
+  const [identity, setIdentity] = useState<FarcasterIdentity>({});
   const [lineIdx, setLineIdx] = useState(0);
   // True while the post-ghost log scan runs (changes the launching status line).
   const [recovering, setRecovering] = useState(false);
@@ -138,8 +141,9 @@ export function LaunchToken({
     // Same best-effort identity capture as create-launcher: resolves to {}
     // outside a mini-app host, so the record simply lacks the launcher* fields.
     getFarcasterIdentity()
-      .then((identity) =>
-        fetch(`/api/launchers/${launcher.id}/launches`, {
+      .then((identity) => {
+        setIdentity(identity);
+        return fetch(`/api/launchers/${launcher.id}/launches`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -151,8 +155,8 @@ export function LaunchToken({
             ...(identity.username && { launcherUsername: identity.username }),
             ...(identity.pfpUrl && { launcherPfpUrl: identity.pfpUrl }),
           }),
-        })
-      )
+        });
+      })
       .then((res) => {
         if (!res.ok) throw new Error(`registry error (${res.status})`);
       })
@@ -465,11 +469,39 @@ export function LaunchToken({
             <p className="error-code">{copy.verify.failed}</p>
           )}
           <div className="card" style={{ width: '100%', textAlign: 'left', marginTop: 14 }}>
-            <div className="muted">{copy.success.tokenLabel}</div>
+            <div className="muted">{copy.success.nameLabel}</div>
+            <b style={{ fontSize: 13 }}>
+              {name} <span className="mono">${symbol}</span>
+            </b>
+            <div className="muted" style={{ marginTop: 6 }}>
+              {copy.success.tokenLabel}
+            </div>
             <b style={{ fontSize: 13 }} className="mono">
               <a href={`${EXPLORER_URL}/token/${proof.token}`} target="_blank" rel="noreferrer">
                 {proof.token}
               </a>
+            </b>
+            <div className="muted" style={{ marginTop: 6 }}>
+              {copy.success.launchedByLabel}
+            </div>
+            <b style={{ fontSize: 13 }}>
+              <IdentityLink
+                username={identity.username}
+                pfpUrl={identity.pfpUrl}
+                fallbackAddress={address}
+              />
+            </b>
+            <div className="muted" style={{ marginTop: 6 }}>
+              {copy.success.viaLabel}
+            </div>
+            <b style={{ fontSize: 13 }}>
+              “{launcher.name}”{' '}
+              <IdentityLink
+                username={launcher.creatorUsername}
+                pfpUrl={launcher.creatorPfpUrl}
+                fallbackAddress={launcher.feeRecipient}
+                wrap={copy.home.creator}
+              />
             </b>
             <div className="muted" style={{ marginTop: 6 }}>
               {copy.success.pairedLabel}
@@ -553,29 +585,13 @@ export function LaunchToken({
         {copy.launch.title}
       </h1>
       <p className="meme-sub">
-        via “{launcher.name}”
-        {launcher.creatorUsername ? (
-          <>
-            {' '}
-            <a
-              className="creator-link"
-              href={`https://farcaster.xyz/${launcher.creatorUsername}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {launcher.creatorPfpUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={launcher.creatorPfpUrl} alt="" width={20} height={20} className="creator-pfp" />
-              )}
-              {copy.home.creator(`@${launcher.creatorUsername}`)}
-            </a>
-          </>
-        ) : (
-          <span className="muted">
-            {' '}
-            {copy.home.creator(`${launcher.feeRecipient.slice(0, 6)}…${launcher.feeRecipient.slice(-4)}`)}
-          </span>
-        )}
+        via “{launcher.name}”{' '}
+        <IdentityLink
+          username={launcher.creatorUsername}
+          pfpUrl={launcher.creatorPfpUrl}
+          fallbackAddress={launcher.feeRecipient}
+          wrap={copy.home.creator}
+        />
       </p>
 
       <div className="row">
@@ -657,5 +673,48 @@ export function LaunchToken({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * pfp + @username linking to farcaster, falling back to a shortened address —
+ * the identity chip used by the form header (launcher creator) and the
+ * success card ("launched by" / "via"). `wrap` lets callers run the handle
+ * through a copy helper like copy.home.creator ("by @…").
+ */
+function IdentityLink({
+  username,
+  pfpUrl,
+  fallbackAddress,
+  wrap = (who) => who,
+}: {
+  username?: string;
+  pfpUrl?: string;
+  fallbackAddress?: string;
+  wrap?: (who: string) => string;
+}) {
+  if (!username) {
+    if (!fallbackAddress) return null;
+    return (
+      <span className="muted">
+        {wrap(`${fallbackAddress.slice(0, 6)}…${fallbackAddress.slice(-4)}`)}
+      </span>
+    );
+  }
+  return (
+    <a
+      className="creator-link"
+      href={`https://farcaster.xyz/${username}`}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {pfpUrl && (
+        // Plain <img>: pfpUrl is an arbitrary remote host, which next/image
+        // would reject without a remotePatterns entry.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={pfpUrl} alt="" width={20} height={20} className="creator-pfp" />
+      )}
+      {wrap(`@${username}`)}
+    </a>
   );
 }

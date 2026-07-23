@@ -141,7 +141,10 @@ export const copy = {
   success: {
     title: 'it launched.\nwhile you launched.',
     stamp: 'proven: 100% hoodie',
+    nameLabel: 'name',
     tokenLabel: 'token',
+    launchedByLabel: 'launched by',
+    viaLabel: 'via',
     pairedLabel: 'paired',
     pairedValue: '🔒 $HOODIE (verified on-chain)',
     button: 'share the bit →',
