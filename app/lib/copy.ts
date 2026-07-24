@@ -66,16 +66,17 @@ export const copy = {
     via: (launcherName: string) => `via ${launcherName}`,
   },
 
-  // The market-cap leaderboard screen. Row identity strings (launched by /
-  // via) reuse copy.tokens; these are the leaderboard-only strings.
+  // The market-cap leaderboard screen: table rows under muted-caps column
+  // headers (rendered uppercase by the .lb-head styles).
   leaderboard: {
     header: 'top dawgs',
     sub: 'ranked by market cap. live-ish.',
     empty: 'nothing to rank yet.\nlaunch something, dawg.',
-    // Takes a formatted USD market cap like "$1.2m".
-    mcap: (usd: string) => `mcap ${usd}`,
-    // Tokens Dexscreener hasn't priced yet (no trades) sit unranked below.
-    noData: 'mcap — (no trades yet, dawg)',
+    colToken: 'token',
+    colCreator: 'creator',
+    colMcap: 'mcap',
+    // Creator cell when the launch predates identity capture.
+    anon: 'anon',
   },
 
   // The token detail screen — tap any card on "tokens launched". Card labels

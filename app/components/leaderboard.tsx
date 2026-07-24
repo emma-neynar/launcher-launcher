@@ -11,15 +11,21 @@ import { useLaunchers } from './launcher-list';
  * The "top dawgs" leaderboard: every token launched through any launcher,
  * ranked by live market cap (Dexscreener, via /api/leaderboard — see that
  * route for why not Clanker's market data). Tokens with no market data yet
- * sit unranked at the bottom. Tapping a row opens the token detail screen.
+ * sit unranked at the bottom.
+ *
+ * Laid out as horizontal table rows (rank / token / creator / mcap) under a
+ * muted-caps header — see .lb-grid in globals.css for the responsive column
+ * plan. Tapping a row opens the token detail screen, which is also where the
+ * launcher link lives (rows stay lean).
  */
 export function Leaderboard({
   onSelectToken,
-  onSelectLauncher,
   onBack,
 }: {
   onSelectToken: (launch: Launch, launcher: Launcher) => void;
-  onSelectLauncher: (l: Launcher) => void;
+  /** Accepted for parity with TokenList's wiring; rows don't link launchers —
+   * the token detail screen (one tap in) does. */
+  onSelectLauncher?: (l: Launcher) => void;
   onBack: () => void;
 }) {
   const { data, isLoading } = useQuery<LeaderboardEntry[]>({
@@ -39,10 +45,6 @@ export function Leaderboard({
   const select = (entry: LeaderboardEntry) => {
     const launcher = launchers.find((l) => l.id === entry.launcherId);
     if (launcher) onSelectToken(entry.launch, launcher);
-  };
-  const selectLauncher = (entry: LeaderboardEntry) => {
-    const launcher = launchers.find((l) => l.id === entry.launcherId);
-    if (launcher) onSelectLauncher(launcher);
   };
 
   return (
@@ -68,53 +70,44 @@ export function Leaderboard({
           </div>
         </div>
       )}
-      <div className="card-grid">
-        {entries.map((entry, i) => (
-          <div
-            key={entry.launch.token}
-            className="card clickable"
-            style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}
-            onClick={() => select(entry)}
-          >
-            <div className="rank">{entry.marketCapUsd !== null ? i + 1 : '—'}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <b style={{ fontSize: 13 }}>
-                {entry.launch.name} <span className="mono">${entry.launch.symbol}</span>
-              </b>
-              <div style={{ marginTop: 2, fontSize: 12, fontWeight: 'bold' }}>
-                {entry.marketCapUsd !== null ? (
-                  copy.leaderboard.mcap(formatMarketCap(entry.marketCapUsd))
-                ) : (
-                  <span className="muted">{copy.leaderboard.noData}</span>
-                )}
-              </div>
-              <div className="creator">
-                {entry.launch.launcherUsername || entry.launch.launcherAddress ? (
-                  <IdentityLink
-                    username={entry.launch.launcherUsername}
-                    pfpUrl={entry.launch.launcherPfpUrl}
-                    fallbackAddress={entry.launch.launcherAddress}
-                    wrap={copy.tokens.launchedBy}
-                  />
-                ) : (
-                  <span className="muted">{copy.tokens.anon}</span>
-                )}
-              </div>
-              <div style={{ marginTop: 4 }}>
-                <button
-                  className="linkish"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    selectLauncher(entry);
-                  }}
-                >
-                  {copy.tokens.via(entry.launcherName)} →
-                </button>
-              </div>
-            </div>
+      {entries.length > 0 && (
+        <div className="lb-grid lb-head" aria-hidden="true">
+          <span className="lb-rank" />
+          <span className="lb-token">{copy.leaderboard.colToken}</span>
+          <span className="lb-who">{copy.leaderboard.colCreator}</span>
+          <span className="lb-mcap">{copy.leaderboard.colMcap}</span>
+        </div>
+      )}
+      {entries.map((entry, i) => (
+        <div
+          key={entry.launch.token}
+          className="card clickable lb-grid"
+          onClick={() => select(entry)}
+        >
+          <div className="rank lb-rank">{entry.marketCapUsd !== null ? i + 1 : '—'}</div>
+          <b className="lb-token lb-name" style={{ fontSize: 13 }}>
+            {entry.launch.name} <span className="mono">${entry.launch.symbol}</span>
+          </b>
+          <div className="lb-who creator">
+            {entry.launch.launcherUsername || entry.launch.launcherAddress ? (
+              <IdentityLink
+                username={entry.launch.launcherUsername}
+                pfpUrl={entry.launch.launcherPfpUrl}
+                fallbackAddress={entry.launch.launcherAddress}
+              />
+            ) : (
+              <span className="muted">{copy.leaderboard.anon}</span>
+            )}
           </div>
-        ))}
-      </div>
+          <div className="lb-mcap">
+            {entry.marketCapUsd !== null ? (
+              formatMarketCap(entry.marketCapUsd)
+            ) : (
+              <span className="muted">—</span>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

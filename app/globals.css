@@ -264,7 +264,7 @@ a {
   outline: 3px solid var(--purple);
 }
 
-/* Leaderboard rank number — big Impact digit down the left of each card. */
+/* Leaderboard rank number — big Impact digit down the left of each row. */
 .rank {
   font-family: var(--font-impact);
   font-size: 22px;
@@ -274,6 +274,88 @@ a {
   color: var(--purple);
   -webkit-text-stroke: 1px #000;
   paint-order: stroke fill;
+}
+
+/* --------------------------------------------------------------------------
+ * Leaderboard table rows
+ *
+ * One shared grid for the header row and the entry rows so the columns always
+ * line up. Phones get two lines per row (creator identity tucked under the
+ * token name, no creator column header); desktop flattens each row to one
+ * line with its own creator column — see the media query below.
+ * ------------------------------------------------------------------------ */
+
+.lb-grid {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'rank token mcap'
+    'rank who mcap';
+  column-gap: 10px;
+  align-items: center;
+}
+
+.lb-rank {
+  grid-area: rank;
+}
+
+.lb-token {
+  grid-area: token;
+  min-width: 0;
+}
+
+/* Long token names get chopped, not wrapped — rows stay one unit tall. */
+.lb-name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-name .mono {
+  word-break: normal;
+}
+
+.lb-who {
+  grid-area: who;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-mcap {
+  grid-area: mcap;
+  text-align: right;
+  font-weight: bold;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Muted-caps column headers, white Impact over the dark backdrop (same
+ * treatment as the home footer links). Horizontal padding matches a card's
+ * content inset (12px padding + 2px border) so the columns line up. */
+.lb-head {
+  padding: 0 14px;
+  margin-bottom: 6px;
+  font-family: var(--font-impact);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* No creator column on phones — identity lives under the token name. */
+.lb-head .lb-who {
+  display: none;
+}
+
+/* Entry rows: full-width sticker cards, slimmer than the default card. */
+.card.lb-grid {
+  padding: 9px 12px;
+  margin-bottom: 8px;
 }
 
 .pill {
@@ -804,6 +886,32 @@ details.advanced summary {
   .rank {
     font-size: 28px;
     min-width: 32px;
+  }
+
+  /* ---- leaderboard: one-line rows with their own creator column ---- */
+
+  .lb-grid {
+    grid-template-columns: 36px minmax(0, 1.3fr) minmax(0, 1fr) auto;
+    grid-template-areas: 'rank token who mcap';
+    column-gap: 14px;
+  }
+
+  .lb-head .lb-who {
+    display: block;
+  }
+
+  .lb-head {
+    font-size: 13px;
+    padding: 0 20px; /* 18px card padding + 2px border */
+  }
+
+  .lb-mcap {
+    font-size: 15px;
+  }
+
+  .card.lb-grid {
+    padding: 11px 18px;
+    margin-bottom: 10px;
   }
 
   details.advanced summary {
