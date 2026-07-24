@@ -9,6 +9,7 @@ import { CreateLauncher } from './components/create-launcher';
 import { Info } from './components/info';
 import { LaunchToken } from './components/launch-token';
 import { LauncherList, splitLaunchers, useLaunchers } from './components/launcher-list';
+import { Leaderboard } from './components/leaderboard';
 import { TokenDetail } from './components/token-detail';
 import { TokenList } from './components/token-list';
 import { VerifyPairing } from './components/verify-pairing';
@@ -21,6 +22,7 @@ type Screen =
   | 'others'
   | 'tokens'
   | 'token'
+  | 'leaderboard'
   | 'create'
   | 'launch'
   | 'verify'
@@ -48,6 +50,9 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
     launch: Launch;
     launcher: Launcher;
   } | null>(null);
+  // Which list screen the token detail was opened from, so its back button
+  // returns there (the leaderboard and the tokens list both open it).
+  const [tokenReturn, setTokenReturn] = useState<'tokens' | 'leaderboard'>('tokens');
   // True only when arriving on the launch screen straight from creating that
   // launcher — LaunchToken shows the big share-your-launcher moment.
   const [justCreated, setJustCreated] = useState(false);
@@ -154,8 +159,15 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
               >
                 {copy.home.othersOption(counts?.others)}
               </button>
-              <button className="btn alt round" onClick={() => setScreen('tokens')}>
+              <button
+                className="btn alt round"
+                style={{ marginBottom: 12 }}
+                onClick={() => setScreen('tokens')}
+              >
                 {copy.home.tokensOption(counts?.tokens)}
+              </button>
+              <button className="btn alt round" onClick={() => setScreen('leaderboard')}>
+                {copy.home.leaderboardOption}
               </button>
             </div>
           </div>
@@ -175,6 +187,19 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
         <TokenList
           onSelectToken={(launch, launcher) => {
             setSelectedToken({ launch, launcher });
+            setTokenReturn('tokens');
+            setScreen('token');
+          }}
+          onSelectLauncher={selectLauncher}
+          onBack={() => setScreen('home')}
+        />
+      )}
+
+      {active === 'leaderboard' && (
+        <Leaderboard
+          onSelectToken={(launch, launcher) => {
+            setSelectedToken({ launch, launcher });
+            setTokenReturn('leaderboard');
             setScreen('token');
           }}
           onSelectLauncher={selectLauncher}
@@ -187,7 +212,7 @@ export function Home({ initialLauncherId }: { initialLauncherId?: string }) {
           launch={selectedToken.launch}
           launcher={selectedToken.launcher}
           onSelectLauncher={selectLauncher}
-          onBack={() => setScreen('tokens')}
+          onBack={() => setScreen(tokenReturn)}
           onToast={setToast}
         />
       )}

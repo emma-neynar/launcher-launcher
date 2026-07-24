@@ -38,6 +38,7 @@ export const copy = {
     othersOption: (n?: number) =>
       n === undefined ? "everyone else's launchers" : `everyone else's launchers (${n})`,
     tokensOption: (n?: number) => (n === undefined ? 'tokens launched' : `tokens launched (${n})`),
+    leaderboardOption: 'top dawgs 🏆',
     // List screens.
     header: 'your launchers',
     othersHeader: "everyone else's launchers",
@@ -63,6 +64,18 @@ export const copy = {
     launchedBy: (who: string) => `launched by ${who}`,
     anon: 'launched by anon',
     via: (launcherName: string) => `via ${launcherName}`,
+  },
+
+  // The market-cap leaderboard screen. Row identity strings (launched by /
+  // via) reuse copy.tokens; these are the leaderboard-only strings.
+  leaderboard: {
+    header: 'top dawgs',
+    sub: 'ranked by market cap. live-ish.',
+    empty: 'nothing to rank yet.\nlaunch something, dawg.',
+    // Takes a formatted USD market cap like "$1.2m".
+    mcap: (usd: string) => `mcap ${usd}`,
+    // Tokens Dexscreener hasn't priced yet (no trades) sit unranked below.
+    noData: 'mcap — (no trades yet, dawg)',
   },
 
   // The token detail screen — tap any card on "tokens launched". Card labels

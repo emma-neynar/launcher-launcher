@@ -53,7 +53,10 @@ export function LauncherList({
   const { address } = useAccount();
   const { launchers, isLoading } = useLaunchers();
   const { mine, others } = splitLaunchers(launchers, address);
-  const shown = filter === 'mine' ? mine : others;
+  // Busiest launchers first; stable sort keeps registry (creation) order on ties.
+  const shown = (filter === 'mine' ? mine : others)
+    .slice()
+    .sort((a, b) => b.launches.length - a.launches.length);
 
   async function copyShare(id: string) {
     try {

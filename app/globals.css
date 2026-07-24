@@ -264,6 +264,18 @@ a {
   outline: 3px solid var(--purple);
 }
 
+/* Leaderboard rank number — big Impact digit down the left of each card. */
+.rank {
+  font-family: var(--font-impact);
+  font-size: 22px;
+  line-height: 1;
+  min-width: 26px;
+  text-align: center;
+  color: var(--purple);
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -787,6 +799,11 @@ details.advanced summary {
 
   .creator {
     font-size: 13px;
+  }
+
+  .rank {
+    font-size: 28px;
+    min-width: 32px;
   }
 
   details.advanced summary {
